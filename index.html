@@ -224,6 +224,15 @@
   .pin-lock-box .linklike{margin-top:14px;}
   .pin-lock-box p.sub{font-size:13px; color:var(--muted); margin:-14px 0 18px;}
 
+  /* Диктовка через браузер имеет смысл там, где у устройства нет своей клавиатурной
+     диктовки — то есть на десктопе. На touch-устройствах (телефон/планшет) прячем её,
+     раз голосовой ввод и так есть у системной клавиатуры. */
+  .mobile-only{display:none;}
+  @media (hover:none) and (pointer:coarse){
+    .desktop-only{display:none;}
+    .mobile-only{display:block;}
+  }
+
   @media (max-width:420px){
     .month-stats{grid-template-columns:1fr;}
     .calendar-day{min-height:54px;}
@@ -247,7 +256,7 @@
 
   <div class="pin-lock-box" id="pin-gate-box" style="display:none;">
     <h1>Войдите, чтобы настроить устройство</h1>
-    <p class="sub">PIN ещё не задан на этом устройстве. Прежде чем его создать, подтвердите, что это ваш аккаунт — иначе так и должно быть недоступно.</p>
+    <p class="sub">PIN ещё не задан на этом устройстве. Прежде чем его создать, подтвердите, что это ваш аккаунт.</p>
     <input type="text" class="pin-text-input" id="gate-email" placeholder="Email" autocomplete="email">
     <input type="password" class="pin-text-input" id="gate-password" placeholder="Пароль" autocomplete="current-password" style="margin-top:10px;">
     <div class="hint" id="gate-error" style="display:none; color:var(--danger);"></div>
@@ -307,9 +316,6 @@
       <div class="edit-banner" id="edit-banner" style="display:none;"></div>
 
       <label id="raw-input-label">Опишите задачу своими словами</label>
-      <div class="textarea-tools">
-        <button class="small-btn" onclick="startRawInputDictation()">Надиктовать</button>
-      </div>
       <textarea id="raw-input" placeholder="Пишите как есть, не нужно структурировать..."></textarea>
       <div class="hint" id="raw-input-hint">Можно сразу отправить только это поле — недостающее ИИ попробует определить сам, а что не получится — попадёт в открытые вопросы карточки.</div>
       <div class="actions-row" style="margin-top:8px;">
@@ -563,11 +569,12 @@
     </label>
 
     <label>Что делал за день</label>
-    <div class="textarea-tools">
+    <div class="textarea-tools desktop-only">
       <button class="small-btn" onclick="startDayDictation()">Надиктовать</button>
     </div>
     <textarea id="day-note" placeholder="Например: готовил справку, согласовывал правки, разбирал закупки, отвечал на запросы..."></textarea>
-    <div class="hint">Речь в текст — через браузер (бесплатно). Если в настройках указан ИИ-ключ, выжимка ниже соберётся сама сразу после надиктовки.</div>
+    <div class="hint desktop-only">Речь в текст — через браузер (бесплатно). Если в настройках указан ИИ-ключ, выжимка ниже соберётся сама сразу после надиктовки.</div>
+    <div class="hint mobile-only">На телефоне удобнее нажать на поле и воспользоваться голосовым вводом клавиатуры. Если после надиктовки в настройках указан ИИ-ключ — нажмите «Сделать выжимку» ниже.</div>
 
     <label>Краткая выжимка</label>
     <textarea id="day-summary" class="summary-box" placeholder="Нажмите «Сделать выжимку» или заполните вручную"></textarea>
@@ -1598,9 +1605,6 @@ function stopDictation(){
 }
 function startDayDictation(){
   startDictation('day-note', () => { if(aiConfigured()) generateDaySummary(); });
-}
-function startRawInputDictation(){
-  startDictation('raw-input');
 }
 
 function splitLines(text){

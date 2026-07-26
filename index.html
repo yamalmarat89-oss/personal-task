@@ -1580,12 +1580,18 @@ function startDictation(fieldId, onDone){
     const text = Array.from(event.results).map(r => r[0].transcript).join(' ').trim();
     const field = document.getElementById(fieldId);
     if(field) field.value = field.value ? field.value.trim() + '\n' + text : text;
+    // continuous=false должен остановить запись сам, но на iOS Safari это не всегда
+    // происходит вовремя (индикатор микрофона зависает) — останавливаем явно.
+    try{ rec.stop(); }catch(e){}
     if(onDone) onDone();
   };
-  rec.onerror = () => showToast('Не удалось распознать голос');
+  rec.onerror = () => { showToast('Не удалось распознать голос'); activeRecognition = null; };
   rec.onend = () => { activeRecognition = null; };
   rec.start();
   showToast('Слушаю');
+  // Подстраховка: если браузер не пришлёт ни result, ни end (известная особенность
+  // некоторых мобильных Safari), не даём кнопке "зависнуть" в состоянии записи навсегда.
+  setTimeout(() => { if(activeRecognition === rec){ try{ rec.stop(); }catch(e){} activeRecognition = null; } }, 15000);
 }
 function stopDictation(){
   if(activeRecognition){ activeRecognition.stop(); activeRecognition = null; }

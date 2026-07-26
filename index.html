@@ -219,8 +219,10 @@
   .pin-lock-box{width:min(320px,100%); text-align:center;}
   .pin-lock-box h1{font-size:18px; margin:0 0 20px;}
   .pin-lock-box input{text-align:center; font-size:22px; letter-spacing:6px;}
+  .pin-lock-box input.pin-text-input{font-size:14px; letter-spacing:normal; text-align:left;}
   .pin-lock-box .actions-row{margin-top:16px;}
   .pin-lock-box .linklike{margin-top:14px;}
+  .pin-lock-box p.sub{font-size:13px; color:var(--muted); margin:-14px 0 18px;}
 
   @media (max-width:420px){
     .month-stats{grid-template-columns:1fr;}
@@ -233,7 +235,7 @@
 <body>
 
 <div class="pin-lock" id="pin-lock-screen">
-  <div class="pin-lock-box">
+  <div class="pin-lock-box" id="pin-enter-box">
     <h1>Введите PIN-код</h1>
     <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="pin-input" placeholder="••••" autocomplete="off">
     <div class="hint" id="pin-error" style="display:none; color:var(--danger);">Неверный PIN-код</div>
@@ -241,6 +243,18 @@
       <button class="primary" onclick="attemptUnlock()">Войти</button>
     </div>
     <button class="linklike" onclick="resetPinProtection()">Забыли PIN? Сбросить защиту</button>
+  </div>
+
+  <div class="pin-lock-box" id="pin-setup-box" style="display:none;">
+    <h1>Создайте PIN для входа</h1>
+    <p class="sub">Без PIN этот прототип не откроется — придумайте код и секретное слово на случай, если забудете PIN.</p>
+    <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="setup-pin-input" placeholder="Новый PIN (4-6 цифр)" autocomplete="off">
+    <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="setup-pin-confirm" placeholder="Повторите PIN" autocomplete="off" style="margin-top:10px;">
+    <input type="text" class="pin-text-input" id="setup-pin-recovery" placeholder="Секретное слово для сброса PIN" autocomplete="off" style="margin-top:10px;">
+    <div class="hint" id="setup-pin-error" style="display:none; color:var(--danger);"></div>
+    <div class="actions-row">
+      <button class="primary" onclick="completePinSetup()">Установить PIN</button>
+    </div>
   </div>
 </div>
 
@@ -565,7 +579,7 @@ const TRASH_RETENTION_DAYS = 30;
 const DEFAULT_LUNCH_HOURS = 1.5;
 const SETTINGS_KEY = 'atc_settings_v1';
 const PIN_KEY = 'atc_pin_v1';
-const PIN_EMAIL_KEY = 'atc_pin_email_v1';
+const PIN_RECOVERY_KEY = 'atc_pin_recovery_v1';
 
 // --- Облачная синхронизация (Supabase) ---
 // URL и publishable-ключ безопасно хранить прямо в коде: доступ к данным защищён
@@ -638,7 +652,6 @@ async function initCloudSync(){
   const user = await getSessionUser();
   renderSyncStatus(user);
   if(!user) return;
-  ensurePinEmailBackfill();
   showToast('Синхронизация…');
   const changed = await cloudPullAll();
   if(changed){
@@ -926,17 +939,40 @@ function renderAiProfilesList(){
 function getPin(){ return localStorage.getItem(PIN_KEY) || ''; }
 function isPinSet(){ return !!getPin(); }
 
+// PIN обязателен: если не задан, показываем не сам экран ввода, а экран создания —
+// приложение никогда не открывается "как есть" без хотя бы одного PIN за всё время жизни.
 function checkLockOnLoad(){
   const overlay = document.getElementById('pin-lock-screen');
   const app = document.getElementById('app-root');
+  const enterBox = document.getElementById('pin-enter-box');
+  const setupBox = document.getElementById('pin-setup-box');
+  overlay.classList.add('show');
+  app.style.display = 'none';
   if(isPinSet()){
-    overlay.classList.add('show');
-    app.style.display = 'none';
+    enterBox.style.display = '';
+    setupBox.style.display = 'none';
     document.getElementById('pin-input').focus();
   } else {
-    overlay.classList.remove('show');
-    app.style.display = '';
+    enterBox.style.display = 'none';
+    setupBox.style.display = '';
+    document.getElementById('setup-pin-input').focus();
   }
+}
+function completePinSetup(){
+  const pin = document.getElementById('setup-pin-input').value.trim();
+  const confirmPin = document.getElementById('setup-pin-confirm').value.trim();
+  const recovery = document.getElementById('setup-pin-recovery').value.trim();
+  const errorEl = document.getElementById('setup-pin-error');
+  const showError = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+  if(!/^\d{4,6}$/.test(pin)){ showError('PIN — это 4-6 цифр'); return; }
+  if(pin !== confirmPin){ showError('PIN и повтор не совпадают'); return; }
+  if(!recovery){ showError('Придумайте секретное слово для сброса'); return; }
+  localStorage.setItem(PIN_KEY, pin);
+  localStorage.setItem(PIN_RECOVERY_KEY, recovery);
+  errorEl.style.display = 'none';
+  document.getElementById('pin-lock-screen').classList.remove('show');
+  document.getElementById('app-root').style.display = '';
+  showToast('PIN установлен');
 }
 function attemptUnlock(){
   const input = document.getElementById('pin-input');
@@ -952,71 +988,40 @@ function attemptUnlock(){
     input.focus();
   }
 }
-// Сброс PIN с экрана блокировки требует email того же аккаунта, что привязан к
-// PIN — иначе забытый PIN мог бы снять любой, кто просто открыл страницу.
+// Сброс PIN с экрана блокировки требует секретное слово, придуманное при установке PIN.
+// Это слово никогда не попадает в код приложения (а значит и в публичный репозиторий) —
+// оно хранится только в localStorage этого браузера, в отличие от email, который виден
+// в истории git-коммитов и по нему легко догадаться.
 function resetPinProtection(){
-  const expectedEmail = (localStorage.getItem(PIN_EMAIL_KEY) || '').trim().toLowerCase();
-  if(!expectedEmail){
-    alert('Для этого PIN не привязан email восстановления — сброс через этот экран недоступен.');
+  const expected = (localStorage.getItem(PIN_RECOVERY_KEY) || '').trim().toLowerCase();
+  if(!expected){
+    alert('Для этого PIN не задано секретное слово — сброс через этот экран недоступен.');
     return;
   }
-  const input = prompt('Для сброса PIN укажите email вашего аккаунта:');
+  const input = prompt('Введите секретное слово для сброса PIN:');
   if(input === null) return;
-  if(input.trim().toLowerCase() !== expectedEmail){
-    alert('Email не совпадает — сброс PIN невозможен.');
+  if(input.trim().toLowerCase() !== expected){
+    alert('Слово не совпадает — сброс PIN невозможен.');
     return;
   }
-  if(!confirm('Убрать PIN-защиту входа? Задачи, дни и настройки ИИ при этом не удаляются — сбрасывается только PIN.')) return;
+  if(!confirm('Убрать текущий PIN? Задачи, дни и настройки ИИ при этом не удаляются — сразу после этого попросим создать новый PIN.')) return;
   localStorage.removeItem(PIN_KEY);
-  localStorage.removeItem(PIN_EMAIL_KEY);
-  document.getElementById('pin-lock-screen').classList.remove('show');
-  document.getElementById('app-root').style.display = '';
-}
-
-// Если PIN уже стоит, а email восстановления ещё не сохранён (например, PIN
-// поставили до появления этой защиты) — подставляем email активной сессии синхронизации.
-async function ensurePinEmailBackfill(){
-  if(!isPinSet() || localStorage.getItem(PIN_EMAIL_KEY)) return;
-  const user = await getSessionUser();
-  if(user?.email) localStorage.setItem(PIN_EMAIL_KEY, user.email);
+  localStorage.removeItem(PIN_RECOVERY_KEY);
+  checkLockOnLoad();
 }
 
 function renderPinSettings(){
   const body = document.getElementById('pin-settings-body');
   if(!body) return;
-  if(isPinSet()){
-    const email = localStorage.getItem(PIN_EMAIL_KEY);
-    body.innerHTML = `
-      <div class="field"><div class="v">PIN-код установлен.</div></div>
-      <div class="field"><div class="k">Email для сброса PIN</div><div class="v">${email ? escapeHtml(email) : 'не задан — сброс через экран блокировки недоступен'}</div></div>
-      <div class="actions-row">
-        <button onclick="promptChangePin()">Изменить PIN</button>
-        <button onclick="promptChangePinEmail()">Изменить email для сброса</button>
-      </div>
-      <div class="actions-row">
-        <button class="danger" onclick="promptDisablePin()">Отключить PIN</button>
-      </div>
-    `;
-  } else {
-    body.innerHTML = `
-      <label style="margin-top:10px;">Новый PIN <span class="opt">4-6 цифр</span></label>
-      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="new-pin-input" placeholder="••••">
-      <div class="actions-row">
-        <button class="primary" onclick="setNewPin()">Установить PIN</button>
-      </div>
-    `;
-  }
-}
-async function setNewPin(){
-  const val = document.getElementById('new-pin-input').value.trim();
-  if(!/^\d{4,6}$/.test(val)){ showToast('PIN — это 4-6 цифр'); return; }
-  localStorage.setItem(PIN_KEY, val);
-  const user = await getSessionUser();
-  const suggested = user?.email || '';
-  const email = prompt('Email для восстановления, если забудете PIN:', suggested);
-  if(email && email.trim()) localStorage.setItem(PIN_EMAIL_KEY, email.trim());
-  showToast('PIN установлен');
-  renderPinSettings();
+  const recovery = localStorage.getItem(PIN_RECOVERY_KEY);
+  body.innerHTML = `
+    <div class="field"><div class="v">PIN-код установлен (обязателен для входа).</div></div>
+    <div class="field"><div class="k">Секретное слово для сброса</div><div class="v">${recovery ? escapeHtml(recovery) : 'не задано — сброс через экран блокировки недоступен'}</div></div>
+    <div class="actions-row">
+      <button onclick="promptChangePin()">Изменить PIN</button>
+      <button onclick="promptChangePinRecovery()">Изменить секретное слово</button>
+    </div>
+  `;
 }
 function promptChangePin(){
   const val = prompt('Новый PIN (4-6 цифр):');
@@ -1026,20 +1031,13 @@ function promptChangePin(){
   showToast('PIN изменён');
   renderPinSettings();
 }
-function promptChangePinEmail(){
-  const current = localStorage.getItem(PIN_EMAIL_KEY) || '';
-  const val = prompt('Email для сброса PIN:', current);
+function promptChangePinRecovery(){
+  const current = localStorage.getItem(PIN_RECOVERY_KEY) || '';
+  const val = prompt('Секретное слово для сброса PIN:', current);
   if(val === null) return;
-  if(!val.trim()){ showToast('Email не может быть пустым'); return; }
-  localStorage.setItem(PIN_EMAIL_KEY, val.trim());
-  showToast('Email для сброса обновлён');
-  renderPinSettings();
-}
-function promptDisablePin(){
-  if(!confirm('Отключить PIN-защиту входа?')) return;
-  localStorage.removeItem(PIN_KEY);
-  localStorage.removeItem(PIN_EMAIL_KEY);
-  showToast('PIN отключён');
+  if(!val.trim()){ showToast('Слово не может быть пустым'); return; }
+  localStorage.setItem(PIN_RECOVERY_KEY, val.trim());
+  showToast('Секретное слово обновлено');
   renderPinSettings();
 }
 
@@ -2204,6 +2202,9 @@ function escapeHtml(str){
 updateHomeMeta();
 checkLockOnLoad();
 document.getElementById('pin-input').addEventListener('keydown', e => { if(e.key === 'Enter') attemptUnlock(); });
+['setup-pin-input','setup-pin-confirm','setup-pin-recovery'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => { if(e.key === 'Enter') completePinSetup(); });
+});
 initCloudSync();
 getSupabase().auth.onAuthStateChange((event) => {
   if(event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') initCloudSync();

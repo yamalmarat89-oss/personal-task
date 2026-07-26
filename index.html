@@ -1,0 +1,2175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Помощник для структурирования задачи</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1f2430; --muted:#6b7280;
+    --accent:#3355ff; --accent-ink:#ffffff; --border:#e3e5ea;
+    --ok:#1f9d55; --warn:#c98a12; --danger:#d1453b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  .app{max-width:560px; margin:0 auto; min-height:100vh; background:var(--bg); display:flex; flex-direction:column;}
+  header.topbar{
+    display:flex; align-items:center; gap:12px; padding:16px 20px; background:var(--card);
+    border-bottom:1px solid var(--border); position:sticky; top:0; z-index:5;
+  }
+  header.topbar button.back{
+    background:none; border:none; font-size:20px; cursor:pointer; color:var(--ink); padding:4px 8px;
+  }
+  header.topbar h1{font-size:16px; margin:0; font-weight:600; flex:1;}
+  header.topbar button.home-btn{
+    background:none; border:1px solid var(--border); border-radius:8px; font-size:12px; cursor:pointer;
+    color:var(--muted); padding:6px 10px; white-space:nowrap;
+  }
+  header.topbar button.home-btn:hover{color:var(--accent); border-color:var(--accent);}
+  main{flex:1; padding:20px; padding-bottom:40px;}
+  .screen{display:none;}
+  .screen.active{display:block;}
+
+  .big-btn{
+    display:block; width:100%; padding:16px; margin-bottom:12px; border-radius:12px; border:1px solid var(--border);
+    background:var(--card); font-size:15px; font-weight:600; color:var(--ink); cursor:pointer; text-align:left;
+  }
+  .big-btn.primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+  .big-btn .desc{display:block; font-weight:400; font-size:13px; color:var(--muted); margin-top:4px;}
+  .big-btn.primary .desc{color:#dfe4ff;}
+
+  label{display:block; font-size:13px; font-weight:600; margin:16px 0 6px; color:var(--ink);}
+  label .opt{font-weight:400; color:var(--muted);}
+  textarea, input[type=text], input[type=date], input[type=time], input[type=password], select{
+    width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; font-size:14px;
+    font-family:inherit; background:var(--card); color:var(--ink);
+  }
+  textarea{min-height:90px; resize:vertical;}
+  .hint{font-size:12px; color:var(--muted); margin-top:4px;}
+  .key-input-row{display:flex; gap:8px; align-items:stretch;}
+  .key-input-row input{flex:1; min-width:0;}
+  .key-input-row button{flex:0 0 auto; white-space:nowrap;}
+  .profile-item{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:8px;
+  }
+  .profile-item.active{border-color:var(--ok); box-shadow:0 0 0 1px var(--ok) inset;}
+  .profile-item .profile-main{min-width:0;}
+  .profile-item .profile-title{font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .profile-item .profile-meta{font-size:12px; color:var(--muted); margin-top:2px;}
+  .profile-item .profile-actions{display:flex; gap:6px; flex-shrink:0;}
+  .active-badge{font-size:10px; font-weight:700; color:var(--ok); background:#e5f6ec; border-radius:999px; padding:2px 8px; text-transform:uppercase; letter-spacing:.02em;}
+
+  details.hints{
+    margin-top:20px; border:1px solid var(--border); border-radius:12px; background:var(--card); padding:4px 14px;
+  }
+  details.hints summary{padding:12px 0; font-weight:600; font-size:14px; cursor:pointer;}
+  .hint-field{padding-bottom:14px;}
+
+  .actions-row{display:flex; gap:10px; margin-top:24px;}
+  .actions-row button{flex:1; padding:13px; border-radius:10px; border:1px solid var(--border); background:var(--card); font-size:14px; cursor:pointer;}
+  .actions-row button.primary{background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600;}
+
+  .card-box{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px; margin-bottom:16px;}
+  .card-box h2{font-size:15px; margin:0 0 14px; display:flex; align-items:center; justify-content:space-between;}
+  .card-num{font-size:12px; font-weight:400; color:var(--muted);}
+  .field{margin-bottom:14px;}
+  .field .k{font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; margin-bottom:3px;}
+  .field .v{font-size:14px; white-space:pre-wrap;}
+  .field .v.empty{color:var(--muted); font-style:italic;}
+  ul.bullets{margin:0; padding-left:18px;}
+  ul.bullets li{margin-bottom:3px; font-size:14px;}
+
+  .field.field-changed{background:#fff8e6; border-radius:8px; padding:8px 10px; margin:0 -10px 14px -10px;}
+  .changed-tag{font-size:10px; font-weight:700; color:#8a6100; background:#fbe6b0; border-radius:5px; padding:1px 6px; margin-left:6px; text-transform:none; letter-spacing:0; vertical-align:1px;}
+  .field .v del{color:var(--muted); text-decoration:line-through; opacity:.75;}
+  .revision-pair{display:grid; grid-template-columns:1fr; gap:8px; margin-top:5px;}
+  .revision-side{border:1px solid var(--border); border-radius:8px; padding:8px 10px; background:#fff;}
+  .revision-side.old{background:#fafafa;}
+  .revision-label{font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; margin-bottom:4px;}
+  .revision-side.new .revision-label{color:#1f7a44;}
+  .revision-value{font-size:14px; white-space:pre-wrap; overflow-wrap:anywhere;}
+  .revision-value.empty{color:var(--muted); font-style:italic;}
+  .revision-side.old del{color:var(--muted); text-decoration:line-through; opacity:.75;}
+  @media (min-width:520px){.revision-pair{grid-template-columns:1fr 1fr;}}
+
+  .icon-btn{background:none; border:none; font-size:16px; cursor:pointer; color:var(--muted); padding:2px 6px; line-height:1;}
+  .icon-btn:hover{color:var(--accent);}
+  .actions-row button.danger{color:var(--danger); border-color:#f3c9c6;}
+  .linklike{background:none; border:none; color:var(--muted); font-size:13px; cursor:pointer; padding:8px; text-decoration:underline;}
+
+  .badge{display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600;}
+  .badge.draft{background:#eceef1; color:var(--muted);}
+  .badge.sent{background:#e6ecff; color:var(--accent);}
+  .badge.confirmed{background:#e5f6ec; color:var(--ok);}
+  .badge.corrected{background:#fdf3e3; color:var(--warn);}
+  .badge.progress{background:#fdf3e3; color:var(--warn);}
+  .badge.done{background:#e5f6ec; color:var(--ok);}
+
+  .history-item{
+    background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px 16px;
+    cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px;
+  }
+  .history-item .title{font-weight:600; font-size:14px;}
+  .history-item .meta{font-size:12px; color:var(--muted); margin-top:2px;}
+  .empty-state{text-align:center; color:var(--muted); padding:60px 20px; font-size:14px;}
+
+  .task-group{margin-bottom:22px;}
+  .task-group-title{
+    display:grid; grid-template-columns:32px minmax(0,1fr) 32px; align-items:center; gap:8px;
+    font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;
+    color:var(--muted); margin-bottom:8px; text-align:center;
+  }
+  .task-group-title-text{grid-column:2; min-width:0; text-transform:none;}
+  .task-group-title .icon-btn{grid-column:3; justify-self:end;}
+  .version-list{position:relative; margin-left:8px; padding-left:18px; border-left:2px solid var(--border);}
+  .version-list .history-item{margin-bottom:8px; position:relative;}
+  .version-list .history-item::before{
+    content:''; position:absolute; left:-18px; top:22px; width:16px; height:2px; background:var(--border);
+  }
+  .version-item.current-version{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset;}
+  .version-tag{font-size:11px; font-weight:700; color:var(--accent); background:#e6ecff; border-radius:6px; padding:1px 7px; margin-right:6px;}
+
+  .version-chips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;}
+  .version-chip{
+    font-size:12px; padding:4px 10px; border-radius:999px; border:1px solid var(--border); background:var(--card);
+    cursor:pointer; color:var(--muted);
+  }
+  .version-chip.active{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600;}
+
+  .edit-banner{
+    background:#e6ecff; border:1px solid #c3d0ff; border-radius:10px; padding:12px 14px; font-size:13px;
+    color:#1f2f8f; margin-bottom:16px;
+  }
+  .edit-banner b{display:block; margin-bottom:2px;}
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#1f2430; color:#fff;
+    padding:10px 18px; border-radius:999px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s;
+    z-index:50;
+  }
+  .toast.show{opacity:1;}
+
+  .note{background:#fff8e6; border:1px solid #f0dca3; border-radius:10px; padding:12px 14px; font-size:12.5px; color:#7a5b00; margin-bottom:16px;}
+  .calendar-toolbar{display:grid; grid-template-columns:42px 1fr 42px; align-items:center; gap:8px; margin-bottom:14px;}
+  .calendar-toolbar h2{margin:0; font-size:16px; text-align:center;}
+  .calendar-toolbar button,
+  .small-btn{
+    border:1px solid var(--border); background:var(--card); color:var(--ink); border-radius:8px;
+    padding:8px 10px; font:inherit; font-size:13px; cursor:pointer;
+  }
+  .calendar-toolbar button{height:38px; font-size:18px; line-height:1;}
+  .month-stats{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:14px;}
+  .stat-pill{background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 8px; text-align:center;}
+  .stat-pill .k{font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.02em;}
+  .stat-pill .v{font-size:15px; font-weight:700; margin-top:2px;}
+  .calendar-grid{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:6px;}
+  .calendar-weekday{text-align:center; color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase;}
+  .calendar-day{
+    min-height:62px; border:1px solid var(--border); border-radius:8px; background:var(--card);
+    padding:6px; text-align:left; cursor:pointer; display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .calendar-day:hover{border-color:var(--accent);}
+  .calendar-day.today{box-shadow:0 0 0 1px var(--accent) inset;}
+  .calendar-day.has-entry{background:#f8fbff;}
+  .calendar-day .num{font-size:13px; font-weight:700;}
+  .calendar-day .mark{font-size:10px; color:var(--muted); line-height:1.2;}
+  .calendar-day.has-entry .mark{color:var(--accent); font-weight:600;}
+  .time-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .check-row{
+    display:flex; align-items:center; gap:8px; margin:14px 0 4px; font-size:13px; font-weight:600;
+  }
+  .check-row input{width:16px; height:16px;}
+  .day-total{
+    background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px;
+    font-size:13px; color:var(--muted); margin-bottom:12px;
+  }
+  .day-total b{color:var(--ink);}
+  .textarea-tools{display:flex; justify-content:flex-end; gap:8px; margin:6px 0;}
+  .summary-box{min-height:82px;}
+  .report-box{min-height:60vh; font-size:13px; line-height:1.5; white-space:pre-wrap;}
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(31,36,48,.38); z-index:80;
+    padding:18px; align-items:center; justify-content:center;
+  }
+  .modal-overlay.show{display:flex;}
+  .day-modal-panel{
+    width:min(560px,100%); max-height:92vh; overflow:auto; background:var(--bg);
+    border-radius:14px; border:1px solid var(--border); box-shadow:0 18px 48px rgba(31,36,48,.22);
+    padding:18px;
+  }
+  .modal-head{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px;}
+  .modal-head h2{font-size:16px; margin:0;}
+
+  .btn-spinner{
+    display:inline-block; width:12px; height:12px; margin-right:7px; vertical-align:-2px;
+    border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
+    opacity:.6; animation:btn-spin .7s linear infinite;
+  }
+  @keyframes btn-spin{ to{ transform:rotate(360deg); } }
+
+  .pin-lock{
+    display:none; position:fixed; inset:0; background:var(--bg); z-index:100;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .pin-lock.show{display:flex;}
+  .pin-lock-box{width:min(320px,100%); text-align:center;}
+  .pin-lock-box h1{font-size:18px; margin:0 0 20px;}
+  .pin-lock-box input{text-align:center; font-size:22px; letter-spacing:6px;}
+  .pin-lock-box .actions-row{margin-top:16px;}
+  .pin-lock-box .linklike{margin-top:14px;}
+
+  @media (max-width:420px){
+    .month-stats{grid-template-columns:1fr;}
+    .calendar-day{min-height:54px;}
+    .time-grid{grid-template-columns:1fr;}
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+</head>
+<body>
+
+<div class="pin-lock" id="pin-lock-screen">
+  <div class="pin-lock-box">
+    <h1>Введите PIN-код</h1>
+    <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="pin-input" placeholder="••••" autocomplete="off">
+    <div class="hint" id="pin-error" style="display:none; color:var(--danger);">Неверный PIN-код</div>
+    <div class="actions-row">
+      <button class="primary" onclick="attemptUnlock()">Войти</button>
+    </div>
+    <button class="linklike" onclick="resetPinProtection()">Забыли PIN? Сбросить защиту</button>
+  </div>
+</div>
+
+<div class="app" id="app-root">
+
+  <!-- ЭКРАН: Главная -->
+  <div class="screen active" id="screen-home">
+    <header class="topbar"><h1>Помощник для структурирования задачи</h1></header>
+    <main>
+      <div class="note">Прототип v1. «ИИ»-извлечение из текста — заглушка (правила, не модель). Логика полей и промпт — см. заметки проекта в vault.</div>
+      <button class="big-btn primary" onclick="startNewTask()">
+        + Новая задача
+        <span class="desc">Записать поручение и собрать карточку</span>
+      </button>
+      <button class="big-btn" onclick="goTo('screen-history')">
+        История
+        <span class="desc" id="history-count-desc">Ранее созданные карточки</span>
+      </button>
+      <button class="big-btn" onclick="goTo('screen-days')" id="day-widget-btn">
+        Календарь дня
+        <span class="desc" id="day-calendar-desc">Время работы и краткая выжимка дня</span>
+        <span class="desc" id="day-widget-note" style="display:none;"></span>
+      </button>
+      <button class="big-btn" onclick="goTo('screen-settings')">
+        Настройки
+        <span class="desc">AI-провайдер, формат вывода</span>
+      </button>
+    </main>
+  </div>
+
+  <!-- ЭКРАН: Ввод -->
+  <div class="screen" id="screen-input">
+    <header class="topbar">
+      <button class="back" onclick="goBack()">←</button>
+      <h1 id="input-title">Что поручили?</h1>
+      <button class="home-btn" onclick="goHome()">Домой</button>
+    </header>
+    <main>
+      <div class="edit-banner" id="edit-banner" style="display:none;"></div>
+
+      <label id="raw-input-label">Опишите задачу своими словами</label>
+      <div class="textarea-tools">
+        <button class="small-btn" onclick="startRawInputDictation()">Надиктовать</button>
+      </div>
+      <textarea id="raw-input" placeholder="Пишите как есть, не нужно структурировать..."></textarea>
+      <div class="hint" id="raw-input-hint">Можно сразу отправить только это поле — недостающее ИИ попробует определить сам, а что не получится — попадёт в открытые вопросы карточки.</div>
+      <div class="actions-row" style="margin-top:8px;">
+        <button id="ai-fill-hints-btn" onclick="aiFillHints()">Разобрать через ИИ</button>
+      </div>
+      <div class="hint">Заполнит подсказки ниже по вашему тексту (нужен ИИ-ключ в настройках). Проверьте и поправьте перед отправкой.</div>
+
+      <div id="ai-understanding-block" style="display:none;">
+        <label>Как ИИ поняла задачу <span class="opt">можно поправить</span></label>
+        <textarea id="ai-understanding" placeholder="Здесь появится краткое связное описание того, как ИИ поняла задачу"></textarea>
+      </div>
+
+      <div class="hint-field" id="change-reason-field" style="display:none;">
+        <label>Что изменилось / что уточнили? <span class="opt">необязательно</span></label>
+        <textarea id="change-reason" placeholder="Например: постановщик уточнил срок и добавил требование"></textarea>
+      </div>
+
+      <details class="hints">
+        <summary>Вопросы-подсказки (необязательно, но помогают структурировать полнее)</summary>
+        <div class="hint-field">
+          <label>Какова цель? <span class="opt">необязательно</span></label>
+          <input type="text" id="hint-goal" placeholder="Например: потребовать устранения нарушений">
+        </div>
+        <div class="hint-field">
+          <label>Для кого готовится результат? <span class="opt">необязательно</span></label>
+          <input type="text" id="hint-audience" placeholder="Например: руководитель отдела">
+        </div>
+        <div class="hint-field">
+          <label>Кто ещё участвует / чья помощь нужна? <span class="opt">необязательно</span></label>
+          <input type="text" id="hint-people" placeholder="Например: юрист согласовывает, коллега готовит расчёт">
+        </div>
+        <div class="hint-field">
+          <label>Где это происходит / в какой системе? <span class="opt">необязательно</span></label>
+          <input type="text" id="hint-where" placeholder="Например: в ЕИС, в переписке по почте, на объекте">
+        </div>
+        <div class="hint-field">
+          <label>Что обязательно должно быть? <span class="opt">необязательно</span></label>
+          <textarea id="hint-requirements" placeholder="По одному пункту с новой строки"></textarea>
+        </div>
+        <div class="hint-field">
+          <label>Что будет считаться успешным результатом? <span class="opt">необязательно</span></label>
+          <input type="text" id="hint-success" placeholder="Например: письмо готово и отправлено">
+        </div>
+        <div class="hint-field">
+          <label>Есть ли срок? <span class="opt">необязательно</span></label>
+          <input type="text" id="hint-deadline" placeholder="Например: до пятницы / 25.07.2026">
+        </div>
+        <div class="hint-field">
+          <label>Как нужно сделать / есть ограничения по способу? <span class="opt">необязательно</span></label>
+          <textarea id="hint-how" placeholder="Например: строго по форме приказа №..., без привлечения подрядчика"></textarea>
+        </div>
+        <div class="hint-field">
+          <label>Какие ресурсы есть (бюджет, время, материалы)? <span class="opt">необязательно</span></label>
+          <input type="text" id="hint-resources" placeholder="Например: без доп. бюджета, 2 дня">
+        </div>
+        <div class="hint-field">
+          <label>Что точно НЕ входит в задачу? <span class="opt">необязательно</span></label>
+          <textarea id="hint-outofscope" placeholder="По одному пункту с новой строки"></textarea>
+        </div>
+        <div class="hint-field">
+          <label>Приоритет <span class="opt">необязательно</span></label>
+          <select id="hint-priority">
+            <option value="">не указан</option>
+            <option value="Низкий">Низкий</option>
+            <option value="Средний">Средний</option>
+            <option value="Высокий">Высокий</option>
+            <option value="Срочно">Срочно</option>
+          </select>
+        </div>
+        <div class="hint-field">
+          <label>Кому и как отчитаться о результате? <span class="opt">необязательно</span></label>
+          <input type="text" id="hint-report" placeholder="Например: письмом руководителю, на планёрке">
+        </div>
+        <div class="hint-field">
+          <label>Что осталось непонятным? <span class="opt">необязательно</span></label>
+          <textarea id="hint-open" placeholder="По одному пункту с новой строки"></textarea>
+        </div>
+      </details>
+
+      <details class="hints" id="draft-preview-box">
+        <summary>Предпросмотр итоговой карточки</summary>
+        <div id="draft-preview-text" style="font-size:13px; white-space:pre-wrap; line-height:1.5; padding-bottom:14px;"></div>
+      </details>
+
+      <div class="actions-row">
+        <button class="primary" onclick="buildCard()">Сформировать карточку</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- ЭКРАН: Карточка -->
+  <div class="screen" id="screen-card">
+    <header class="topbar">
+      <button class="back" onclick="goBack()">←</button>
+      <h1>Карточка</h1>
+      <button class="home-btn" onclick="goHome()">Домой</button>
+    </header>
+    <main id="card-main"></main>
+  </div>
+
+  <!-- ЭКРАН: История -->
+  <div class="screen" id="screen-history">
+    <header class="topbar">
+      <button class="back" onclick="goBack()">←</button>
+      <h1>История</h1>
+      <button class="home-btn" onclick="goHome()">Домой</button>
+    </header>
+    <main id="history-main"></main>
+  </div>
+
+  <!-- ЭКРАН: Недавно удалённые -->
+  <div class="screen" id="screen-trash">
+    <header class="topbar">
+      <button class="back" onclick="goBack()">←</button>
+      <h1>Недавно удалённые</h1>
+      <button class="home-btn" onclick="goHome()">Домой</button>
+    </header>
+    <main>
+      <div class="hint" style="margin-bottom:14px;">Хранятся 30 дней с момента удаления, затем удаляются безвозвратно.</div>
+      <div id="trash-main"></div>
+    </main>
+  </div>
+
+  <!-- ЭКРАН: Календарь дня -->
+  <div class="screen" id="screen-days">
+    <header class="topbar">
+      <button class="back" onclick="goBack()">←</button>
+      <h1>Календарь дня</h1>
+      <button class="home-btn" style="margin-right:6px;" onclick="goTo('screen-days-report')">Подробнее</button>
+      <button class="home-btn" onclick="goHome()">Домой</button>
+    </header>
+    <main>
+      <div class="calendar-toolbar">
+        <button onclick="changeCalendarMonth(-1)">←</button>
+        <h2 id="calendar-month-title"></h2>
+        <button onclick="changeCalendarMonth(1)">→</button>
+      </div>
+      <div class="month-stats" id="month-stats"></div>
+      <div class="calendar-grid" id="calendar-grid"></div>
+    </main>
+  </div>
+
+  <!-- ЭКРАН: Подробный отчёт за месяц -->
+  <div class="screen" id="screen-days-report">
+    <header class="topbar">
+      <button class="back" onclick="goBack()">←</button>
+      <h1 id="days-report-title">Отчёт за месяц</h1>
+      <button class="home-btn" onclick="goHome()">Домой</button>
+    </header>
+    <main>
+      <div class="actions-row" style="margin-top:0;">
+        <button class="primary" onclick="copyDaysReport()">Копировать</button>
+      </div>
+      <textarea id="days-report-text" class="report-box" readonly></textarea>
+    </main>
+  </div>
+
+  <!-- ЭКРАН: Настройки -->
+  <div class="screen" id="screen-settings">
+    <header class="topbar">
+      <button class="back" onclick="goBack()">←</button>
+      <h1>Настройки</h1>
+      <button class="home-btn" onclick="goHome()">Домой</button>
+    </header>
+    <main>
+      <div class="card-box" id="sync-box">
+        <div class="k" style="font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; margin-bottom:6px;">Синхронизация между устройствами</div>
+        <div class="hint" style="margin-top:0;">Войдите под одним и тем же email на телефоне и на компьютере — задачи, дни и названия задач будут общими. ИИ-ключ остаётся только на этом устройстве.</div>
+        <div id="sync-body"></div>
+      </div>
+
+      <div class="card-box">
+        <div class="hint" id="profile-edit-banner" style="display:none; margin-top:0;"></div>
+        <label style="margin-top:0;">ИИ-провайдер</label>
+        <select id="set-provider" onchange="onProviderChange()">
+          <option value="deepseek">DeepSeek</option>
+          <option value="qwen">Qwen (DashScope)</option>
+          <option value="nvidia">NVIDIA NIM</option>
+          <option value="custom">Другой (свой адрес)</option>
+        </select>
+        <div class="hint" id="provider-hint"></div>
+
+        <label>API-ключ</label>
+        <div class="key-input-row">
+          <input type="password" id="set-apikey" placeholder="sk-..." autocomplete="off">
+          <button type="button" class="small-btn" onclick="toggleKeyVisibility()" id="key-toggle-btn">Показать</button>
+        </div>
+        <div class="hint">Хранится только в этом браузере (localStorage), в открытом виде внутри localStorage. Не используйте общий/чужой компьютер.</div>
+
+        <div id="custom-url-field" style="display:none;">
+          <label>Адрес API (OpenAI-совместимый /chat/completions) <span class="opt">для «другого»</span></label>
+          <input type="text" id="set-baseurl" placeholder="https://.../v1/chat/completions">
+        </div>
+
+        <label>Модель <span class="opt">необязательно, есть значение по умолчанию</span></label>
+        <input type="text" id="set-model" placeholder="например, deepseek-v4-pro">
+        <div class="hint">Если оставить пусто или случайно ввести название провайдера — подставится значение по умолчанию.</div>
+
+        <div class="actions-row">
+          <button id="profile-cancel-btn" style="display:none;" onclick="cancelProfileEdit()">Отменить</button>
+          <button class="primary" onclick="saveAiProfile()">Сохранить</button>
+        </div>
+      </div>
+
+      <div class="card-box">
+        <div class="k" style="font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; margin-bottom:10px;">Сохранённые ИИ-провайдеры</div>
+        <div id="ai-profiles-list"></div>
+      </div>
+
+      <div class="card-box" id="pin-settings-box">
+        <div class="k" style="font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; margin-bottom:6px;">PIN-код при входе</div>
+        <div class="hint" style="margin-top:0;">Это лёгкая защита от случайного взгляда, а не настоящая безопасность — PIN хранится открытым текстом в этом браузере, как и всё остальное.</div>
+        <div id="pin-settings-body"></div>
+      </div>
+
+      <div class="card-box">
+        <div class="field"><div class="k">Хранение данных</div><div class="v">Локально в браузере (localStorage) — задачи, дни и ключ ИИ не покидают это устройство и не синхронизируются с другими сами по себе.</div></div>
+        <div class="field"><div class="k">Перенос между устройствами</div><div class="v">Пока вручную: выгрузите файл на одном устройстве и загрузите на другом.</div></div>
+        <div class="actions-row">
+          <button onclick="exportData()">Выгрузить данные (.json)</button>
+          <button onclick="document.getElementById('import-file').click()">Загрузить данные</button>
+        </div>
+        <input type="file" id="import-file" accept="application/json" style="display:none;" onchange="importData(event)">
+      </div>
+    </main>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="day-modal" onclick="if(event.target===this) closeDayModal()">
+  <div class="day-modal-panel">
+    <div class="modal-head">
+      <h2 id="day-modal-title"></h2>
+      <button class="icon-btn" title="Закрыть" onclick="closeDayModal()">×</button>
+    </div>
+    <div class="day-total" id="day-total"></div>
+
+    <div class="time-grid">
+      <div>
+        <label>Начал работать</label>
+        <input type="time" id="day-start" onchange="updateDayTotal()">
+      </div>
+      <div>
+        <label>Закончил работать</label>
+        <input type="time" id="day-end" onchange="updateDayTotal()">
+      </div>
+    </div>
+    <label class="check-row">
+      <input type="checkbox" id="day-lunch" onchange="updateDayTotal()">
+      Ходил на обед
+    </label>
+
+    <label>Что делал за день</label>
+    <div class="textarea-tools">
+      <button class="small-btn" onclick="startDayDictation()">Надиктовать</button>
+    </div>
+    <textarea id="day-note" placeholder="Например: готовил справку, согласовывал правки, разбирал закупки, отвечал на запросы..."></textarea>
+    <div class="hint">Речь в текст — через браузер (бесплатно). Если в настройках указан ИИ-ключ, выжимка ниже соберётся сама сразу после надиктовки.</div>
+
+    <label>Краткая выжимка</label>
+    <textarea id="day-summary" class="summary-box" placeholder="Нажмите «Сделать выжимку» или заполните вручную"></textarea>
+
+    <div class="actions-row">
+      <button id="day-summary-btn" onclick="generateDaySummary()">Сделать выжимку</button>
+      <button class="primary" onclick="saveDayModal()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const STORE_KEY = 'atc_tasks_v1';
+const COUNTER_KEY = 'atc_counter_v1';
+const NAMES_KEY = 'atc_task_names_v1';
+const DAY_LOG_KEY = 'atc_day_logs_v1';
+const TRASH_RETENTION_DAYS = 30;
+const DEFAULT_LUNCH_HOURS = 1.5;
+const SETTINGS_KEY = 'atc_settings_v1';
+const PIN_KEY = 'atc_pin_v1';
+
+// --- Облачная синхронизация (Supabase) ---
+// URL и publishable-ключ безопасно хранить прямо в коде: доступ к данным защищён
+// не секретностью ключа, а Row Level Security в базе (каждый видит только свои строки).
+const SUPABASE_URL = 'https://nczxecyswfrvxelkedqb.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_oyg7ErNw7EMil_Fs-DHGEg_48OO5hFH';
+const SYNC_META_KEY = 'atc_sync_meta_v1';
+
+let supabaseClient = null;
+function getSupabase(){
+  if(!supabaseClient) supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return supabaseClient;
+}
+
+async function getSessionUser(){
+  try{
+    const { data } = await getSupabase().auth.getSession();
+    return data.session?.user || null;
+  }catch(e){ return null; }
+}
+
+function loadSyncMeta(){
+  try{ return JSON.parse(localStorage.getItem(SYNC_META_KEY)) || {}; }catch(e){ return {}; }
+}
+function saveSyncMeta(meta){ localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta)); }
+
+// Ключ в облачной таблице app_data -> ключ в localStorage этого прототипа.
+const CLOUD_KEY_MAP = { tasks: 'atc_tasks_v1', day_logs: 'atc_day_logs_v1', task_names: 'atc_task_names_v1', counter: 'atc_counter_v1' };
+
+// Fire-and-forget: не блокируем UI на медленном интернете, ошибку молча логируем в консоль —
+// локальная копия (localStorage) уже сохранена, данные не теряются, просто не долетят до облака.
+async function cloudPush(cloudKey, value){
+  const user = await getSessionUser();
+  if(!user) return;
+  const updated_at = new Date().toISOString();
+  try{
+    const { error } = await getSupabase().from('app_data').upsert({ user_id: user.id, key: cloudKey, value, updated_at });
+    if(error){ console.warn('cloudPush error', cloudKey, error); return; }
+    const meta = loadSyncMeta();
+    meta[cloudKey] = updated_at;
+    saveSyncMeta(meta);
+  }catch(e){ console.warn('cloudPush failed', cloudKey, e); }
+}
+
+// Последняя запись побеждает: сравниваем updated_at из облака с меткой последнего
+// известного нам состояния этого ключа и перезаписываем localStorage, только если облако новее.
+async function cloudPullAll(){
+  const user = await getSessionUser();
+  if(!user) return false;
+  const { data, error } = await getSupabase().from('app_data').select('key,value,updated_at').eq('user_id', user.id);
+  if(error || !data) return false;
+  const meta = loadSyncMeta();
+  let changed = false;
+  data.forEach(row => {
+    const localTs = meta[row.key];
+    if(!localTs || new Date(row.updated_at) > new Date(localTs)){
+      const lsKey = CLOUD_KEY_MAP[row.key];
+      if(lsKey){
+        localStorage.setItem(lsKey, JSON.stringify(row.value));
+        meta[row.key] = row.updated_at;
+        changed = true;
+      }
+    }
+  });
+  saveSyncMeta(meta);
+  return changed;
+}
+
+async function initCloudSync(){
+  const user = await getSessionUser();
+  renderSyncStatus(user);
+  if(!user) return;
+  showToast('Синхронизация…');
+  const changed = await cloudPullAll();
+  if(changed){
+    updateHomeMeta();
+    if(document.getElementById('screen-history').classList.contains('active')) renderHistory();
+    if(document.getElementById('screen-days').classList.contains('active')) renderDayCalendar();
+    showToast('Данные обновлены из облака');
+  }
+}
+
+function renderSyncStatus(user){
+  const body = document.getElementById('sync-body');
+  if(!body) return;
+  if(user){
+    body.innerHTML = `
+      <div class="field"><div class="v">Вход выполнен: ${escapeHtml(user.email)}</div></div>
+      <div class="actions-row">
+        <button onclick="manualCloudSync()">Синхронизировать сейчас</button>
+        <button class="danger" onclick="signOutCloud()">Выйти</button>
+      </div>
+    `;
+  } else {
+    body.innerHTML = `
+      <label style="margin-top:10px;">Email</label>
+      <input type="text" id="sync-email" placeholder="you@example.com" autocomplete="email">
+      <label>Пароль</label>
+      <input type="password" id="sync-password" placeholder="не менее 6 символов" autocomplete="current-password">
+      <div class="hint" id="sync-error" style="display:none; color:var(--danger);"></div>
+      <div class="actions-row">
+        <button class="primary" onclick="signInCloud()">Войти</button>
+      </div>
+    `;
+  }
+}
+
+function showSyncError(msg){
+  const el = document.getElementById('sync-error');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function signInCloud(){
+  const email = document.getElementById('sync-email').value.trim();
+  const password = document.getElementById('sync-password').value;
+  if(!email || !password){ showSyncError('Укажите email и пароль'); return; }
+  const { data, error } = await getSupabase().auth.signInWithPassword({ email, password });
+  if(error){ showSyncError(error.message); return; }
+  showToast('Вход выполнен');
+  await initCloudSync();
+}
+
+async function signOutCloud(){
+  await getSupabase().auth.signOut();
+  renderSyncStatus(null);
+  showToast('Вы вышли из аккаунта синхронизации');
+}
+
+async function manualCloudSync(){
+  showToast('Синхронизация…');
+  await pushAllLocalToCloud();
+  const changed = await cloudPullAll();
+  updateHomeMeta();
+  if(document.getElementById('screen-history').classList.contains('active')) renderHistory();
+  if(document.getElementById('screen-days').classList.contains('active')) renderDayCalendar();
+  showToast(changed ? 'Обновлено из облака' : 'Синхронизировано');
+}
+
+// Принудительно отправить текущее состояние всех ключей в облако — используется
+// кнопкой "Синхронизировать сейчас", чтобы точно протолкнуть локальные правки.
+async function pushAllLocalToCloud(){
+  await cloudPush('tasks', JSON.parse(localStorage.getItem(STORE_KEY) || '[]'));
+  await cloudPush('day_logs', JSON.parse(localStorage.getItem(DAY_LOG_KEY) || '{}'));
+  await cloudPush('task_names', JSON.parse(localStorage.getItem(NAMES_KEY) || '{}'));
+  await cloudPush('counter', parseInt(localStorage.getItem(COUNTER_KEY) || '0', 10));
+}
+
+// Название задачи "для себя" — отдельное от самого текста поручения, привязано к номеру
+// задачи (а не к конкретной версии), чтобы не путаться, когда задач много.
+function loadNames(){
+  try{ return JSON.parse(localStorage.getItem(NAMES_KEY)) || {}; }catch(e){ return {}; }
+}
+function saveNames(names){ localStorage.setItem(NAMES_KEY, JSON.stringify(names)); cloudPush('task_names', names); }
+function getTaskName(number){ return loadNames()[number] || ''; }
+
+function renameTask(number){
+  const names = loadNames();
+  const current = names[number] || '';
+  const val = prompt(`Название задачи №${number} (для себя, чтобы не путаться в списке):`, current);
+  if(val === null) return; // отмена
+  const trimmed = val.trim();
+  if(trimmed){ names[number] = trimmed; } else { delete names[number]; }
+  saveNames(names);
+  renderHistory();
+  if(document.getElementById('screen-card').classList.contains('active') && currentTaskId){
+    renderCard(currentTaskId);
+  }
+}
+
+function purgeTrash(tasks){
+  const cutoff = Date.now() - TRASH_RETENTION_DAYS*24*60*60*1000;
+  return tasks.filter(t => !(t.deleted_at && new Date(t.deleted_at).getTime() < cutoff));
+}
+
+function loadTasks(){
+  let tasks;
+  try{ tasks = JSON.parse(localStorage.getItem(STORE_KEY)) || []; }catch(e){ tasks = []; }
+  const purged = purgeTrash(tasks);
+  if(purged.length !== tasks.length){ localStorage.setItem(STORE_KEY, JSON.stringify(purged)); }
+  return purged;
+}
+function saveTasks(tasks){ localStorage.setItem(STORE_KEY, JSON.stringify(tasks)); cloudPush('tasks', tasks); }
+function nextNumber(){
+  let n = parseInt(localStorage.getItem(COUNTER_KEY) || '0', 10) + 1;
+  localStorage.setItem(COUNTER_KEY, String(n));
+  cloudPush('counter', n);
+  return n;
+}
+
+function loadDayLogs(){
+  try{ return JSON.parse(localStorage.getItem(DAY_LOG_KEY)) || {}; }catch(e){ return {}; }
+}
+function saveDayLogs(logs){ localStorage.setItem(DAY_LOG_KEY, JSON.stringify(logs)); cloudPush('day_logs', logs); }
+
+// --- Настройки ИИ-провайдера ---
+// Ключ хранится в открытом виде в localStorage этого браузера — см. предупреждение в UI настроек.
+const AI_PRESETS = {
+  deepseek: { label:'DeepSeek', url:'https://api.deepseek.com/chat/completions', model:'deepseek-v4-pro', hint:'Ключ с platform.deepseek.com. Модели: deepseek-v4-pro (по умолчанию) или deepseek-v4-flash (быстрее/дешевле).' },
+  qwen:     { label:'Qwen (DashScope)', url:'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', model:'qwen-plus', hint:'OpenAI-совместимый режим DashScope (Alibaba Cloud).' },
+  nvidia:   { label:'NVIDIA NIM', url:'https://integrate.api.nvidia.com/v1/chat/completions', model:'meta/llama-3.1-70b-instruct', hint:'Ключ с build.nvidia.com, модель можно поменять на любую из каталога NIM.' },
+  custom:   { label:'Другой', url:'', model:'', hint:'Укажите свой OpenAI-совместимый адрес /chat/completions.' }
+};
+
+// Профили хранятся списком: {activeId, profiles:[{id,provider,apiKey,model,baseUrl}]}.
+// Старый формат (один объект {provider,apiKey,model,baseUrl}) мигрируется в список при первом чтении.
+function loadAiData(){
+  let raw;
+  try{ raw = JSON.parse(localStorage.getItem(SETTINGS_KEY)); }catch(e){ raw = null; }
+  if(!raw) return { activeId:null, profiles:[] };
+  if(Array.isArray(raw.profiles)) return raw;
+  if(raw.apiKey || raw.provider){
+    const id = 'p_' + (raw.id || Date.now());
+    return { activeId:id, profiles:[{ id, provider: raw.provider||'deepseek', apiKey: raw.apiKey||'', model: raw.model||'', baseUrl: raw.baseUrl||'' }] };
+  }
+  return { activeId:null, profiles:[] };
+}
+function saveAiData(data){ localStorage.setItem(SETTINGS_KEY, JSON.stringify(data)); }
+function getActiveAiProfile(){
+  const data = loadAiData();
+  return data.profiles.find(p => p.id === data.activeId) || null;
+}
+function maskKey(key){
+  if(!key) return '';
+  if(key.length <= 8) return key[0] + '···' + key.slice(-1);
+  return key.slice(0,4) + '···' + key.slice(-4);
+}
+
+let editingProfileId = null; // null = форма создаёт новый профиль, иначе — редактирует существующий
+
+function fillSettingsForm(){
+  editingProfileId = null;
+  document.getElementById('profile-edit-banner').style.display = 'none';
+  document.getElementById('profile-cancel-btn').style.display = 'none';
+  document.getElementById('set-provider').value = 'deepseek';
+  document.getElementById('set-apikey').value = '';
+  document.getElementById('set-model').value = '';
+  document.getElementById('set-baseurl').value = '';
+  document.getElementById('set-apikey').type = 'password';
+  document.getElementById('key-toggle-btn').textContent = 'Показать';
+  onProviderChange();
+  renderAiProfilesList();
+  renderPinSettings();
+  getSessionUser().then(renderSyncStatus);
+}
+function onProviderChange(){
+  const provider = document.getElementById('set-provider').value;
+  const preset = AI_PRESETS[provider];
+  document.getElementById('provider-hint').textContent = preset.hint;
+  document.getElementById('custom-url-field').style.display = provider === 'custom' ? 'block' : 'none';
+  const modelField = document.getElementById('set-model');
+  modelField.placeholder = provider === 'custom' ? 'название модели' : preset.model;
+}
+function toggleKeyVisibility(){
+  const field = document.getElementById('set-apikey');
+  const btn = document.getElementById('key-toggle-btn');
+  const showing = field.type === 'text';
+  field.type = showing ? 'password' : 'text';
+  btn.textContent = showing ? 'Показать' : 'Скрыть';
+}
+
+function saveAiProfile(){
+  const provider = document.getElementById('set-provider').value;
+  const preset = AI_PRESETS[provider];
+  const apiKey = document.getElementById('set-apikey').value.trim();
+  let model = document.getElementById('set-model').value.trim();
+  const baseUrl = document.getElementById('set-baseurl').value.trim();
+
+  if(!apiKey){ showToast('Укажите API-ключ'); return; }
+  // Защита от типичной ошибки: в поле "Модель" случайно вписали название провайдера вместо ID модели.
+  const looksLikeProviderLabel = Object.values(AI_PRESETS).some(p => p.label.toLowerCase() === model.toLowerCase());
+  if(looksLikeProviderLabel) model = '';
+
+  const data = loadAiData();
+  if(editingProfileId){
+    const p = data.profiles.find(x => x.id === editingProfileId);
+    if(p) Object.assign(p, { provider, apiKey, model, baseUrl });
+  } else {
+    const id = 'p_' + Date.now();
+    data.profiles.push({ id, provider, apiKey, model, baseUrl });
+    if(!data.activeId) data.activeId = id;
+  }
+  saveAiData(data);
+  showToast(`Сохранено: ${preset.label}${model ? ' · ' + model : ' · модель по умолчанию (' + preset.model + ')'}`);
+  fillSettingsForm();
+}
+
+function editAiProfile(id){
+  const data = loadAiData();
+  const p = data.profiles.find(x => x.id === id);
+  if(!p) return;
+  editingProfileId = id;
+  document.getElementById('set-provider').value = p.provider;
+  document.getElementById('set-apikey').value = p.apiKey;
+  document.getElementById('set-model').value = p.model;
+  document.getElementById('set-baseurl').value = p.baseUrl;
+  onProviderChange();
+  const banner = document.getElementById('profile-edit-banner');
+  banner.style.display = 'block';
+  banner.textContent = `Редактируется: ${AI_PRESETS[p.provider].label} · ${maskKey(p.apiKey)}`;
+  document.getElementById('profile-cancel-btn').style.display = '';
+}
+function cancelProfileEdit(){
+  fillSettingsForm();
+}
+function activateAiProfile(id){
+  const data = loadAiData();
+  data.activeId = id;
+  saveAiData(data);
+  renderAiProfilesList();
+  showToast('Активный провайдер переключён');
+}
+function deleteAiProfile(id){
+  const data = loadAiData();
+  const p = data.profiles.find(x => x.id === id);
+  if(!p) return;
+  if(!confirm(`Удалить провайдера «${AI_PRESETS[p.provider].label} · ${maskKey(p.apiKey)}»?`)) return;
+  data.profiles = data.profiles.filter(x => x.id !== id);
+  if(data.activeId === id) data.activeId = data.profiles[0]?.id || null;
+  saveAiData(data);
+  if(editingProfileId === id) fillSettingsForm();
+  else renderAiProfilesList();
+  showToast('Удалено');
+}
+
+function renderAiProfilesList(){
+  const container = document.getElementById('ai-profiles-list');
+  if(!container) return;
+  const data = loadAiData();
+  if(!data.profiles.length){
+    container.innerHTML = '<div class="hint" style="margin:0;">Пока ничего не сохранено — заполните форму выше.</div>';
+    return;
+  }
+  container.innerHTML = data.profiles.map(p => {
+    const isActive = p.id === data.activeId;
+    const preset = AI_PRESETS[p.provider] || AI_PRESETS.custom;
+    const modelLabel = p.model || preset.model || '—';
+    return `
+      <div class="profile-item ${isActive?'active':''}">
+        <div class="profile-main">
+          <div class="profile-title">${escapeHtml(preset.label)} ${isActive ? '<span class="active-badge">активен</span>' : ''}</div>
+          <div class="profile-meta">${escapeHtml(maskKey(p.apiKey))} · модель: ${escapeHtml(modelLabel)}</div>
+        </div>
+        <div class="profile-actions">
+          ${isActive ? '' : `<button class="small-btn" onclick="activateAiProfile('${p.id}')">Сделать активным</button>`}
+          <button class="icon-btn" title="Изменить" onclick="editAiProfile('${p.id}')">✎</button>
+          <button class="icon-btn" title="Удалить" onclick="deleteAiProfile('${p.id}')">🗑</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// --- PIN-код при входе. Это soft-защита от случайного взгляда, а не безопасность:
+// PIN и код приложения открыты в браузере, реальный злоумышленник обойдёт её без труда. ---
+function getPin(){ return localStorage.getItem(PIN_KEY) || ''; }
+function isPinSet(){ return !!getPin(); }
+
+function checkLockOnLoad(){
+  const overlay = document.getElementById('pin-lock-screen');
+  const app = document.getElementById('app-root');
+  if(isPinSet()){
+    overlay.classList.add('show');
+    app.style.display = 'none';
+    document.getElementById('pin-input').focus();
+  } else {
+    overlay.classList.remove('show');
+    app.style.display = '';
+  }
+}
+function attemptUnlock(){
+  const input = document.getElementById('pin-input');
+  const errorEl = document.getElementById('pin-error');
+  if(input.value === getPin()){
+    document.getElementById('pin-lock-screen').classList.remove('show');
+    document.getElementById('app-root').style.display = '';
+    input.value = '';
+    errorEl.style.display = 'none';
+  } else {
+    errorEl.style.display = 'block';
+    input.value = '';
+    input.focus();
+  }
+}
+function resetPinProtection(){
+  if(!confirm('Убрать PIN-защиту входа? Задачи, дни и настройки ИИ при этом не удаляются — сбрасывается только PIN.')) return;
+  localStorage.removeItem(PIN_KEY);
+  document.getElementById('pin-lock-screen').classList.remove('show');
+  document.getElementById('app-root').style.display = '';
+}
+
+function renderPinSettings(){
+  const body = document.getElementById('pin-settings-body');
+  if(!body) return;
+  if(isPinSet()){
+    body.innerHTML = `
+      <div class="field"><div class="v">PIN-код установлен.</div></div>
+      <div class="actions-row">
+        <button onclick="promptChangePin()">Изменить PIN</button>
+        <button class="danger" onclick="promptDisablePin()">Отключить PIN</button>
+      </div>
+    `;
+  } else {
+    body.innerHTML = `
+      <label style="margin-top:10px;">Новый PIN <span class="opt">4-6 цифр</span></label>
+      <input type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" id="new-pin-input" placeholder="••••">
+      <div class="actions-row">
+        <button class="primary" onclick="setNewPin()">Установить PIN</button>
+      </div>
+    `;
+  }
+}
+function setNewPin(){
+  const val = document.getElementById('new-pin-input').value.trim();
+  if(!/^\d{4,6}$/.test(val)){ showToast('PIN — это 4-6 цифр'); return; }
+  localStorage.setItem(PIN_KEY, val);
+  showToast('PIN установлен');
+  renderPinSettings();
+}
+function promptChangePin(){
+  const val = prompt('Новый PIN (4-6 цифр):');
+  if(val === null) return;
+  if(!/^\d{4,6}$/.test(val.trim())){ showToast('PIN — это 4-6 цифр'); return; }
+  localStorage.setItem(PIN_KEY, val.trim());
+  showToast('PIN изменён');
+  renderPinSettings();
+}
+function promptDisablePin(){
+  if(!confirm('Отключить PIN-защиту входа?')) return;
+  localStorage.removeItem(PIN_KEY);
+  showToast('PIN отключён');
+  renderPinSettings();
+}
+
+// --- Экспорт/импорт всех данных прототипа (перенос между устройствами вручную) ---
+function exportData(){
+  const payload = {
+    exported_at: new Date().toISOString(),
+    tasks: JSON.parse(localStorage.getItem(STORE_KEY) || '[]'),
+    counter: localStorage.getItem(COUNTER_KEY) || '0',
+    names: JSON.parse(localStorage.getItem(NAMES_KEY) || '{}'),
+    dayLogs: JSON.parse(localStorage.getItem(DAY_LOG_KEY) || '{}'),
+    aiData: loadAiData()
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ai-task-capture-${dateId(new Date())}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Файл выгружен');
+}
+
+function importData(event){
+  const file = event.target.files[0];
+  event.target.value = '';
+  if(!file) return;
+  if(!confirm('Загрузка файла заменит текущие задачи, дни и настройки на этом устройстве. Продолжить?')) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const payload = JSON.parse(reader.result);
+      localStorage.setItem(STORE_KEY, JSON.stringify(payload.tasks || []));
+      localStorage.setItem(COUNTER_KEY, String(payload.counter || '0'));
+      localStorage.setItem(NAMES_KEY, JSON.stringify(payload.names || {}));
+      localStorage.setItem(DAY_LOG_KEY, JSON.stringify(payload.dayLogs || {}));
+      if(payload.aiData) saveAiData(payload.aiData);
+      else if(payload.settings) saveAiData(loadAiData()); // старые файлы без aiData — не трогаем текущие профили
+      showToast('Данные загружены');
+      fillSettingsForm();
+      updateHomeMeta();
+    }catch(e){
+      showToast('Не удалось прочитать файл');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function aiConfigured(){
+  return !!getActiveAiProfile()?.apiKey;
+}
+
+// Универсальный вызов OpenAI-совместимого /chat/completions. Возвращает текст ответа
+// или бросает ошибку — вызывающий код сам решает, откатываться ли на эвристику.
+async function aiChatComplete(systemPrompt, userPrompt){
+  const p = getActiveAiProfile();
+  if(!p || !p.apiKey) throw new Error('Активный ИИ-провайдер не настроен');
+  const preset = AI_PRESETS[p.provider] || AI_PRESETS.custom;
+  const url = p.provider === 'custom' ? (p.baseUrl || '') : preset.url;
+  const model = p.model || preset.model;
+  if(!url) throw new Error('Не указан адрес API');
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + p.apiKey },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role:'system', content: systemPrompt },
+        { role:'user', content: userPrompt }
+      ],
+      temperature: 0.3
+    })
+  });
+  if(!resp.ok){
+    const errText = await resp.text().catch(()=> '');
+    throw new Error(`ИИ вернул ошибку ${resp.status}: ${errText.slice(0,200)}`);
+  }
+  const data = await resp.json();
+  const content = data?.choices?.[0]?.message?.content;
+  if(!content) throw new Error('Пустой ответ ИИ');
+  return content;
+}
+
+function pad2(n){ return String(n).padStart(2, '0'); }
+function dateId(date){ return `${date.getFullYear()}-${pad2(date.getMonth()+1)}-${pad2(date.getDate())}`; }
+function parseDateId(id){
+  const [y,m,d] = id.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+function formatDateLong(id){
+  return parseDateId(id).toLocaleDateString('ru-RU', { day:'numeric', month:'long', year:'numeric', weekday:'long' });
+}
+function monthTitle(date){
+  return date.toLocaleDateString('ru-RU', { month:'long', year:'numeric' });
+}
+function minutesFromTime(value){
+  if(!value) return null;
+  const [h,m] = value.split(':').map(Number);
+  if(Number.isNaN(h) || Number.isNaN(m)) return null;
+  return h*60 + m;
+}
+function calcWorkHours(start, end, lunch){
+  const s = minutesFromTime(start);
+  const e = minutesFromTime(end);
+  if(s === null || e === null || e <= s) return null;
+  const lunchMinutes = lunch ? DEFAULT_LUNCH_HOURS*60 : 0;
+  return Math.max(0, (e - s - lunchMinutes) / 60);
+}
+function formatHours(hours){
+  if(hours === null) return 'укажите начало и конец';
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return m ? `${h} ч ${m} мин` : `${h} ч`;
+}
+function defaultDayLog(id){
+  return { date:id, start:'', end:'', lunch:false, note:'', summary:'', updated_at:null };
+}
+
+let currentTaskId = null;
+let editingContext = null;  // {number, prevId, prevVersion} — заполняется при "Исправить (новая версия)"
+let editingDraftId = null;  // id черновика при редактировании через карандаш (без новой версии)
+let calendarCursor = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let activeDayId = null;
+let activeRecognition = null;
+
+function startNewTask(){
+  editingContext = null;
+  editingDraftId = null;
+  clearInputForm();
+  document.getElementById('input-title').textContent = 'Что поручили?';
+  document.getElementById('raw-input-label').textContent = 'Опишите задачу своими словами';
+  document.getElementById('raw-input-hint').textContent = 'Можно сразу отправить только это поле — недостающее ИИ попробует определить сам, а что не получится — попадёт в открытые вопросы карточки.';
+  document.getElementById('edit-banner').style.display = 'none';
+  document.getElementById('change-reason-field').style.display = 'none';
+  goTo('screen-input');
+}
+
+function fillFormFrom(task){
+  document.getElementById('raw-input').value = task.raw_input || '';
+  document.getElementById('ai-understanding').value = task.ai_summary || '';
+  document.getElementById('ai-understanding-block').style.display = task.ai_summary ? 'block' : 'none';
+  document.getElementById('hint-goal').value = task.goal || '';
+  document.getElementById('hint-audience').value = task.audience || '';
+  document.getElementById('hint-people').value = task.people || '';
+  document.getElementById('hint-where').value = task.where || '';
+  document.getElementById('hint-requirements').value = (task.requirements||[]).join('\n');
+  document.getElementById('hint-success').value = task.expected_result || '';
+  document.getElementById('hint-deadline').value = task.deadline || '';
+  document.getElementById('hint-how').value = task.how || '';
+  document.getElementById('hint-resources').value = task.resources || '';
+  document.getElementById('hint-outofscope').value = (task.out_of_scope||[]).join('\n');
+  document.getElementById('hint-priority').value = task.priority || '';
+  document.getElementById('hint-report').value = task.report_to || '';
+  document.getElementById('hint-open').value = (task.open_questions||[]).join('\n');
+}
+
+function startCorrection(taskId){
+  const tasks = loadTasks();
+  const task = tasks.find(t=>t.id===taskId);
+  if(!task) return;
+  editingContext = { number: task.number, prevId: task.id, prevVersion: task.version };
+  editingDraftId = null;
+
+  clearInputForm();
+  fillFormFrom(task);
+
+  document.getElementById('input-title').textContent = `Доработка задачи №${task.number}`;
+  document.getElementById('raw-input-label').textContent = 'Отредактируйте описание задачи';
+  document.getElementById('raw-input-hint').textContent = `Это версия ${task.version + 1} задачи №${task.number}. Предыдущая версия подставлена — исправьте нужное.`;
+
+  const banner = document.getElementById('edit-banner');
+  banner.style.display = 'block';
+  banner.innerHTML = `<b>Доработка задачи №${task.number}</b>Будет создана версия ${task.version + 1} (текущая — версия ${task.version}). История прошлых версий сохранится.`;
+
+  document.getElementById('change-reason-field').style.display = 'block';
+  document.getElementById('change-reason').value = '';
+
+  updateDraftPreview();
+  goTo('screen-input');
+}
+
+function startEditDraft(taskId){
+  const tasks = loadTasks();
+  const task = tasks.find(t=>t.id===taskId);
+  if(!task) return;
+  editingDraftId = taskId;
+  editingContext = null;
+
+  clearInputForm();
+  fillFormFrom(task);
+
+  document.getElementById('input-title').textContent = `Редактирование черновика №${task.number}`;
+  document.getElementById('raw-input-label').textContent = 'Отредактируйте описание задачи';
+  document.getElementById('raw-input-hint').textContent = `Правки применятся к этому же черновику — версия ${task.version} не изменится, новая версия не создаётся.`;
+
+  const banner = document.getElementById('edit-banner');
+  banner.style.display = 'block';
+  banner.innerHTML = `<b>Редактирование черновика №${task.number}</b>Пока задача не подтверждена («Всё верно»), правки не создают новую версию.`;
+
+  document.getElementById('change-reason-field').style.display = 'none';
+
+  updateDraftPreview();
+  goTo('screen-input');
+}
+
+function clearInputForm(){
+  ['raw-input','ai-understanding','hint-goal','hint-audience','hint-people','hint-where','hint-requirements','hint-success',
+   'hint-deadline','hint-how','hint-resources','hint-outofscope','hint-priority','hint-report','hint-open','change-reason']
+    .forEach(id => document.getElementById(id).value = '');
+  document.getElementById('ai-understanding-block').style.display = 'none';
+  updateDraftPreview();
+}
+
+// --- Навигация со стеком, чтобы "назад" вело на предыдущий экран, а не всегда на главную ---
+let navStack = ['screen-home'];
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id === 'screen-home') updateHomeMeta();
+  if(id === 'screen-history') renderHistory();
+  if(id === 'screen-trash') renderTrash();
+  if(id === 'screen-days') renderDayCalendar();
+  if(id === 'screen-days-report') renderDaysReport();
+  if(id === 'screen-settings') fillSettingsForm();
+  window.scrollTo(0,0);
+}
+function goTo(id){
+  if(navStack[navStack.length-1] !== id) navStack.push(id);
+  showScreen(id);
+}
+function goBack(){
+  if(navStack.length > 1){
+    navStack.pop();
+    showScreen(navStack[navStack.length-1]);
+  } else {
+    showScreen('screen-home');
+  }
+}
+function goHome(){
+  navStack = ['screen-home'];
+  showScreen('screen-home');
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+// Видимая индикация "идёт обработка" на кнопках, которые ждут ответ ИИ —
+// без этого непонятно, зависло или ещё думает, особенно на медленных ответах.
+function setButtonBusy(id, busyText){
+  const btn = document.getElementById(id);
+  if(!btn) return;
+  if(btn.dataset.originalText === undefined) btn.dataset.originalText = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="btn-spinner"></span>${escapeHtml(busyText)}`;
+}
+function clearButtonBusy(id){
+  const btn = document.getElementById(id);
+  if(!btn) return;
+  btn.disabled = false;
+  btn.textContent = btn.dataset.originalText !== undefined ? btn.dataset.originalText : btn.textContent;
+}
+
+function updateHomeMeta(){
+  const tasks = loadTasks().filter(t=>!t.deleted_at);
+  document.getElementById('history-count-desc').textContent = tasks.length ? tasks.length + ' карточек' : 'Ранее созданные карточки';
+
+  const logs = loadDayLogs();
+  const today = logs[dateId(new Date())];
+  const desc = document.getElementById('day-calendar-desc');
+  const noteEl = document.getElementById('day-widget-note');
+  if(!desc) return;
+  if(today){
+    const hours = calcWorkHours(today.start, today.end, today.lunch);
+    desc.textContent = hours !== null ? `Сегодня: ${formatHours(hours)}` : 'Сегодня есть запись, время не закрыто';
+    const preview = today.summary || today.note || '';
+    if(preview && noteEl){
+      noteEl.style.display = '';
+      noteEl.textContent = preview.length > 70 ? preview.slice(0,70) + '…' : preview;
+    } else if(noteEl){
+      noteEl.style.display = 'none';
+    }
+  } else {
+    desc.textContent = 'Время работы и краткая выжимка дня';
+    if(noteEl) noteEl.style.display = 'none';
+  }
+}
+
+function changeCalendarMonth(delta){
+  calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + delta, 1);
+  renderDayCalendar();
+}
+
+function renderDayCalendar(){
+  const logs = loadDayLogs();
+  const grid = document.getElementById('calendar-grid');
+  const title = document.getElementById('calendar-month-title');
+  const stats = document.getElementById('month-stats');
+  if(!grid || !title || !stats) return;
+
+  const year = calendarCursor.getFullYear();
+  const month = calendarCursor.getMonth();
+  title.textContent = monthTitle(calendarCursor);
+
+  const monthIds = Object.keys(logs).filter(id => {
+    const d = parseDateId(id);
+    return d.getFullYear() === year && d.getMonth() === month;
+  });
+  const monthHours = monthIds
+    .map(id => calcWorkHours(logs[id].start, logs[id].end, logs[id].lunch))
+    .filter(hours => hours !== null);
+  const totalHours = monthHours.reduce((sum, hours) => sum + hours, 0);
+  const avgHours = monthHours.length ? totalHours / monthHours.length : null;
+
+  stats.innerHTML = `
+    <div class="stat-pill"><div class="k">Дней с записью</div><div class="v">${monthIds.length}</div></div>
+    <div class="stat-pill"><div class="k">Рабочих часов</div><div class="v">${formatHours(totalHours)}</div></div>
+    <div class="stat-pill"><div class="k">Средний день</div><div class="v">${avgHours === null ? '—' : formatHours(avgHours)}</div></div>
+  `;
+
+  const weekdays = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  const first = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const leading = (first.getDay() + 6) % 7;
+  const today = dateId(new Date());
+  const cells = weekdays.map(day => `<div class="calendar-weekday">${day}</div>`);
+  for(let i=0;i<leading;i++) cells.push('<div></div>');
+  for(let day=1; day<=daysInMonth; day++){
+    const id = dateId(new Date(year, month, day));
+    const log = logs[id];
+    const hours = log ? calcWorkHours(log.start, log.end, log.lunch) : null;
+    const hasEntry = !!(log && (log.start || log.end || log.note || log.summary));
+    const mark = hasEntry ? (hours !== null ? formatHours(hours) : 'есть запись') : 'заполнить';
+    cells.push(`
+      <button class="calendar-day ${id===today?'today':''} ${hasEntry?'has-entry':''}" onclick="openDayModal('${id}')">
+        <span class="num">${day}</span>
+        <span class="mark">${mark}</span>
+      </button>
+    `);
+  }
+  grid.innerHTML = cells.join('');
+}
+
+function openDayModal(id){
+  const logs = loadDayLogs();
+  const log = logs[id] || defaultDayLog(id);
+  activeDayId = id;
+  document.getElementById('day-modal-title').textContent = formatDateLong(id);
+  document.getElementById('day-start').value = log.start || '';
+  document.getElementById('day-end').value = log.end || '';
+  document.getElementById('day-lunch').checked = !!log.lunch;
+  document.getElementById('day-note').value = log.note || '';
+  document.getElementById('day-summary').value = log.summary || '';
+  updateDayTotal();
+  document.getElementById('day-modal').classList.add('show');
+  document.getElementById('day-start').focus();
+}
+
+function closeDayModal(){
+  stopDictation();
+  document.getElementById('day-modal').classList.remove('show');
+  activeDayId = null;
+}
+
+function updateDayTotal(){
+  const total = calcWorkHours(
+    document.getElementById('day-start').value,
+    document.getElementById('day-end').value,
+    document.getElementById('day-lunch').checked
+  );
+  const lunch = document.getElementById('day-lunch').checked ? `, обед ${DEFAULT_LUNCH_HOURS} ч вычтен` : '';
+  document.getElementById('day-total').innerHTML = `Факт за день: <b>${formatHours(total)}</b>${lunch}`;
+}
+
+function saveDayModal(){
+  if(!activeDayId) return;
+  const logs = loadDayLogs();
+  logs[activeDayId] = {
+    date: activeDayId,
+    start: document.getElementById('day-start').value,
+    end: document.getElementById('day-end').value,
+    lunch: document.getElementById('day-lunch').checked,
+    note: document.getElementById('day-note').value.trim(),
+    summary: document.getElementById('day-summary').value.trim(),
+    updated_at: new Date().toISOString()
+  };
+  saveDayLogs(logs);
+  renderDayCalendar();
+  updateHomeMeta();
+  closeDayModal();
+  showToast('День сохранён');
+}
+
+// --- Компактный текстовый отчёт за месяц (для копирования в недельный/месячный отчёт) ---
+function renderDaysReport(){
+  const logs = loadDayLogs();
+  const year = calendarCursor.getFullYear();
+  const month = calendarCursor.getMonth();
+  document.getElementById('days-report-title').textContent = 'Отчёт: ' + monthTitle(calendarCursor);
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const lines = [];
+  for(let day=1; day<=daysInMonth; day++){
+    const id = dateId(new Date(year, month, day));
+    const log = logs[id];
+    const hasEntry = !!(log && (log.start || log.end || log.note || log.summary));
+    if(!hasEntry) continue;
+    const hours = calcWorkHours(log.start, log.end, log.lunch);
+    const timeRange = (log.start || log.end) ? `${log.start || '?'}–${log.end || '?'}` : 'время не указано';
+    const hoursText = hours !== null ? formatHours(hours) : 'часы не посчитаны';
+    const d = parseDateId(id);
+    const dateLabel = `${pad2(d.getDate())}.${pad2(d.getMonth()+1)}.${d.getFullYear()} (${weekdayShort(d)})`;
+    const body = (log.summary || log.note || '').trim();
+    lines.push(`${dateLabel} — ${timeRange}, ${hoursText}${body ? '\n' + body : ''}`);
+  }
+  document.getElementById('days-report-text').value = lines.length
+    ? lines.join('\n\n')
+    : 'За этот месяц пока нет заполненных дней.';
+}
+
+function copyDaysReport(){
+  const text = document.getElementById('days-report-text').value;
+  navigator.clipboard && navigator.clipboard.writeText ?
+    navigator.clipboard.writeText(text).then(()=>showToast('Скопировано')).catch(()=>fallbackCopy(text)) :
+    fallbackCopy(text);
+}
+
+function weekdayShort(date){
+  return date.toLocaleDateString('ru-RU', { weekday:'short' }).replace('.','');
+}
+
+function summarizeDayNote(note){
+  const cleaned = (note || '').replace(/\s+/g, ' ').trim();
+  if(!cleaned) return '';
+  const parts = cleaned
+    .split(/(?:[.!?;]+|\n+)/)
+    .map(part => part.trim())
+    .filter(part => part.length > 3);
+  const unique = [];
+  parts.forEach(part => {
+    const normalized = part.toLowerCase();
+    if(!unique.some(x => x.toLowerCase() === normalized)) unique.push(part);
+  });
+  const picked = (unique.length ? unique : [cleaned]).slice(0, 5);
+  return picked.map(item => '- ' + item).join('\n');
+}
+
+async function generateDaySummary(){
+  const note = document.getElementById('day-note').value;
+  if(!note.trim()){
+    showToast('Сначала опишите день');
+    return;
+  }
+  if(aiConfigured()){
+    setButtonBusy('day-summary-btn', 'ИИ собирает выжимку…');
+    try{
+      const text = await aiChatComplete(
+        'Ты помогаешь кратко резюмировать рабочий день сотрудника. Сожми текст в 3-6 пунктов маркированным списком на русском, без вступлений и выводов, только суть сделанного.',
+        note
+      );
+      document.getElementById('day-summary').value = text.trim();
+      showToast('Выжимка собрана ИИ');
+      return;
+    }catch(e){
+      showToast('ИИ недоступен, использую простую эвристику');
+    }finally{
+      clearButtonBusy('day-summary-btn');
+    }
+  }
+  const summary = summarizeDayNote(note);
+  document.getElementById('day-summary').value = summary;
+  showToast('Выжимка собрана');
+}
+
+// Голосовой ввод (браузерный Web Speech API) в произвольное текстовое поле.
+// Один активный экземпляр за раз — второй клик на ту же (или другую) кнопку останавливает запись.
+function startDictation(fieldId, onDone){
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    showToast('Голосовой ввод недоступен в этом браузере');
+    return;
+  }
+  if(activeRecognition){
+    stopDictation();
+    showToast('Диктовка остановлена');
+    return;
+  }
+  const rec = new SpeechRecognition();
+  activeRecognition = rec;
+  rec.lang = 'ru-RU';
+  rec.interimResults = false;
+  rec.continuous = false;
+  rec.onresult = event => {
+    const text = Array.from(event.results).map(r => r[0].transcript).join(' ').trim();
+    const field = document.getElementById(fieldId);
+    if(field) field.value = field.value ? field.value.trim() + '\n' + text : text;
+    if(onDone) onDone();
+  };
+  rec.onerror = () => showToast('Не удалось распознать голос');
+  rec.onend = () => { activeRecognition = null; };
+  rec.start();
+  showToast('Слушаю');
+}
+function stopDictation(){
+  if(activeRecognition){ activeRecognition.stop(); activeRecognition = null; }
+}
+function startDayDictation(){
+  startDictation('day-note', () => { if(aiConfigured()) generateDaySummary(); });
+}
+function startRawInputDictation(){
+  startDictation('raw-input');
+}
+
+function splitLines(text){
+  return (text||'').split('\n').map(s=>s.trim()).filter(Boolean);
+}
+
+// Мок "извлечения ИИ": если подсказка не заполнена, пробуем простую эвристику
+// по исходному тексту; если и так пусто — оставляем пустым и это уйдёт в open_questions.
+function mockExtract(raw){
+  const lower = raw.toLowerCase();
+  const guessDeadline = (raw.match(/(до\s+\d{1,2}[.\/]\d{1,2}(?:[.\/]\d{2,4})?)|(до\s+(понедельника|вторника|среды|четверга|пятницы|субботы|воскресенья))/i) || [])[0] || '';
+  return { deadline: guessDeadline };
+}
+
+function collectFormData(){
+  const raw = document.getElementById('raw-input').value.trim();
+  const goal = document.getElementById('hint-goal').value.trim();
+  const audience = document.getElementById('hint-audience').value.trim();
+  const people = document.getElementById('hint-people').value.trim();
+  const where = document.getElementById('hint-where').value.trim();
+  const requirements = splitLines(document.getElementById('hint-requirements').value);
+  const success = document.getElementById('hint-success').value.trim();
+  const deadlineHint = document.getElementById('hint-deadline').value.trim();
+  const how = document.getElementById('hint-how').value.trim();
+  const resources = document.getElementById('hint-resources').value.trim();
+  const out_of_scope = splitLines(document.getElementById('hint-outofscope').value);
+  const priority = document.getElementById('hint-priority').value;
+  const report_to = document.getElementById('hint-report').value.trim();
+  const openHint = splitLines(document.getElementById('hint-open').value);
+
+  const guess = mockExtract(raw);
+  const deadline = deadlineHint || guess.deadline || '';
+
+  const open_questions = [...openHint];
+  if(!goal) open_questions.push('Не указана явная цель — уточнить у постановщика.');
+  if(!deadline) open_questions.push('Не указан срок.');
+  if(!success) open_questions.push('Не указан критерий успешного результата.');
+
+  return {
+    raw, goal, audience, people, where, requirements,
+    expected_result: success,
+    deadline, how, resources, out_of_scope, priority, report_to,
+    open_questions: [...new Set(open_questions)]
+  };
+}
+
+// Компактный текстовый предпросмотр итоговой карточки — обновляется на любое
+// изменение полей экрана ввода, чтобы видеть результат ещё до сохранения.
+function updateDraftPreview(){
+  const box = document.getElementById('draft-preview-text');
+  if(!box) return;
+  const data = collectFormData();
+  const aiSummary = document.getElementById('ai-understanding').value.trim();
+
+  if(!data.raw && !aiSummary){
+    box.innerHTML = '<span style="color:var(--muted); font-style:italic;">Начните заполнять поля выше — здесь появится итоговый текст.</span>';
+    return;
+  }
+
+  const parts = [];
+  parts.push(`Что нужно сделать:\n${data.raw || 'не указано'}`);
+  if(aiSummary) parts.push(`Как ИИ поняла задачу:\n${aiSummary}`);
+  parts.push(`Цель:\n${data.goal || '—'}`);
+  parts.push(`Для кого:\n${data.audience || '—'}`);
+  if(data.people) parts.push(`Кто ещё участвует:\n${data.people}`);
+  if(data.where) parts.push(`Где / в какой системе:\n${data.where}`);
+  parts.push(`Ожидаемый результат:\n${data.expected_result || '—'}`);
+  if(data.requirements.length) parts.push(`Обязательные требования:\n${data.requirements.map(r=>'- '+r).join('\n')}`);
+  parts.push(`Срок:\n${data.deadline || 'не указан'}`);
+  if(data.how) parts.push(`Как / ограничения:\n${data.how}`);
+  if(data.resources) parts.push(`Ресурсы:\n${data.resources}`);
+  if(data.out_of_scope.length) parts.push(`Не входит в задачу:\n${data.out_of_scope.map(r=>'- '+r).join('\n')}`);
+  if(data.priority) parts.push(`Приоритет:\n${data.priority}`);
+  if(data.report_to) parts.push(`Отчитаться:\n${data.report_to}`);
+  parts.push(`Открытые вопросы:\n${data.open_questions.length ? data.open_questions.map(r=>'- '+r).join('\n') : 'нет'}`);
+
+  box.textContent = parts.join('\n\n');
+}
+
+// Разбор вольного текста через настроенный ИИ-провайдер: просим строгий JSON
+// по тем же полям, что и подсказки. Заполняем только пустые поля, чтобы не
+// затирать то, что пользователь уже вписал вручную.
+const AI_HINT_FIELDS = ['goal','audience','people','where','requirements','success','deadline','how','resources','outofscope','priority','report','open'];
+async function aiFillHints(){
+  const raw = document.getElementById('raw-input').value.trim();
+  if(!raw){ showToast('Сначала опишите задачу'); return; }
+  if(!aiConfigured()){ showToast('Сначала укажите API-ключ ИИ в настройках'); return; }
+
+  setButtonBusy('ai-fill-hints-btn', 'ИИ разбирает описание…');
+  const schemaHint = `{
+ "summary": "связное краткое понимание задачи в 2-4 предложениях, как будто пересказываете её коллеге",
+ "goal": "цель одной фразой или пусто",
+ "audience": "для кого готовится результат или пусто",
+ "people": "кто ещё участвует/чья помощь нужна или пусто",
+ "where": "где выполняется / в какой системе или пусто",
+ "requirements": ["обязательное требование", "..."],
+ "success": "критерий успешного результата или пусто",
+ "deadline": "срок как есть в тексте или пусто",
+ "how": "ограничения по способу выполнения или пусто",
+ "resources": "бюджет/ресурсы/время или пусто",
+ "outofscope": ["что явно не входит в задачу", "..."],
+ "priority": "Низкий|Средний|Высокий|Срочно или пусто",
+ "report": "кому и как отчитаться о результате или пусто",
+ "open": ["что осталось непонятным из текста", "..."]
+}`;
+  try{
+    const content = await aiChatComplete(
+      `Ты помогаешь структурировать рабочее поручение. Извлеки из текста поля строго в формате JSON без markdown-обрамления и пояснений, по такой схеме:\n${schemaHint}\nЕсли в тексте нет данных для поля — оставь пустую строку или пустой массив. Не придумывай факты, которых нет в тексте.`,
+      raw
+    );
+    const jsonText = content.trim().replace(/^```json\s*|```$/g, '');
+    const parsed = JSON.parse(jsonText);
+
+    const setIfEmpty = (id, value) => {
+      const el = document.getElementById(id);
+      if(!el.value.trim() && value) el.value = value;
+    };
+    const setListIfEmpty = (id, arr) => {
+      const el = document.getElementById(id);
+      if(!el.value.trim() && Array.isArray(arr) && arr.length) el.value = arr.join('\n');
+    };
+
+    if(parsed.summary && !document.getElementById('ai-understanding').value.trim()){
+      document.getElementById('ai-understanding').value = parsed.summary.trim();
+    }
+    document.getElementById('ai-understanding-block').style.display = document.getElementById('ai-understanding').value.trim() ? 'block' : 'none';
+
+    setIfEmpty('hint-goal', parsed.goal);
+    setIfEmpty('hint-audience', parsed.audience);
+    setIfEmpty('hint-people', parsed.people);
+    setIfEmpty('hint-where', parsed.where);
+    setListIfEmpty('hint-requirements', parsed.requirements);
+    setIfEmpty('hint-success', parsed.success);
+    setIfEmpty('hint-deadline', parsed.deadline);
+    setIfEmpty('hint-how', parsed.how);
+    setIfEmpty('hint-resources', parsed.resources);
+    setListIfEmpty('hint-outofscope', parsed.outofscope);
+    if(parsed.priority && !document.getElementById('hint-priority').value) document.getElementById('hint-priority').value = parsed.priority;
+    setIfEmpty('hint-report', parsed.report);
+    setListIfEmpty('hint-open', parsed.open);
+
+    showToast('Подсказки заполнены ИИ — проверьте');
+    updateDraftPreview();
+  }catch(e){
+    showToast('Не удалось разобрать через ИИ: ' + e.message);
+  }finally{
+    clearButtonBusy('ai-fill-hints-btn');
+  }
+}
+
+function makeTitle(raw){
+  return raw.length > 42 ? raw.slice(0,42) + '…' : raw;
+}
+
+function buildCard(){
+  const data = collectFormData();
+  if(!data.raw){
+    showToast('Опишите задачу хотя бы в одном предложении');
+    return;
+  }
+
+  // Ветка 1: редактирование черновика на месте (карандаш) — версия не меняется
+  if(editingDraftId){
+    const tasks = loadTasks();
+    const task = tasks.find(t=>t.id===editingDraftId);
+    if(task){
+      Object.assign(task, {
+        title: makeTitle(data.raw),
+        raw_input: data.raw,
+        ai_summary: document.getElementById('ai-understanding').value.trim(),
+        goal: data.goal,
+        audience: data.audience,
+        people: data.people,
+        where: data.where,
+        requirements: data.requirements,
+        expected_result: data.expected_result,
+        deadline: data.deadline,
+        how: data.how,
+        resources: data.resources,
+        out_of_scope: data.out_of_scope,
+        priority: data.priority,
+        report_to: data.report_to,
+        open_questions: data.open_questions
+      });
+      saveTasks(tasks);
+      currentTaskId = task.id;
+      showToast(`Черновик №${task.number} обновлён`);
+    }
+    editingDraftId = null;
+    clearInputForm();
+    renderCard(currentTaskId);
+    goTo('screen-card');
+    return;
+  }
+
+  // Ветка 2/3: новая версия существующей задачи ("Исправить") или совсем новая задача
+  const tasks = loadTasks();
+  const isCorrection = !!editingContext;
+  const number = isCorrection ? editingContext.number : nextNumber();
+  const version = isCorrection ? editingContext.prevVersion + 1 : 1;
+  const changeReason = isCorrection ? document.getElementById('change-reason').value.trim() : '';
+
+  const task = {
+    id: 'task_' + Date.now(),
+    number,
+    version,
+    parent_id: isCorrection ? editingContext.prevId : null,
+    change_reason: changeReason,
+    title: makeTitle(data.raw),
+    raw_input: data.raw,
+    ai_summary: document.getElementById('ai-understanding').value.trim(),
+    goal: data.goal,
+    audience: data.audience,
+    people: data.people,
+    where: data.where,
+    requirements: data.requirements,
+    expected_result: data.expected_result,
+    deadline: data.deadline,
+    how: data.how,
+    resources: data.resources,
+    out_of_scope: data.out_of_scope,
+    priority: data.priority,
+    report_to: data.report_to,
+    open_questions: data.open_questions,
+    status: 'draft', // draft | sent | confirmed | corrected | progress | done
+    history: [],
+    created_at: new Date().toISOString()
+  };
+  tasks.unshift(task);
+  saveTasks(tasks);
+  currentTaskId = task.id;
+  editingContext = null;
+  clearInputForm();
+
+  renderCard(task.id);
+  goTo('screen-card');
+  showToast(version > 1 ? `Создана версия ${version} задачи №${number}` : `Создана задача №${number}`);
+}
+
+function statusLabel(status){
+  return {
+    draft:'Черновик', sent:'Отправлено', confirmed:'Подтверждено',
+    corrected:'Скорректировано', progress:'В работе', done:'Завершено'
+  }[status] || status;
+}
+function statusClass(status){
+  return {draft:'draft', sent:'sent', confirmed:'confirmed', corrected:'corrected', progress:'progress', done:'done'}[status] || 'draft';
+}
+
+// Зачёркивание обычными (не HTML) символами — комбинирующий unicode-символ U+0336
+// поверх каждого не-пробельного символа. В Word выглядит как зачёркивание, но
+// некоторые мессенджеры показывают его слабо, поэтому при копировании добавляем
+// ещё и явный plain-text маркер удаления.
+function strikeUnicode(str){
+  return (str||'').replace(/[^\s]/g, ch => ch + '̶');
+}
+
+function removedCopyText(str){
+  return `[- ${strikeUnicode(str || '')} -]`;
+}
+
+function listChanged(curr, prev){
+  curr = curr || []; prev = prev || [];
+  return curr.length !== prev.length || curr.some((item, idx) => item !== prev[idx]);
+}
+
+// Для мессенджера в доработке показываем явную пару. Прежняя формулировка внутри
+// [- ... -] видна как удалённая даже там, где Unicode-зачёркивание отрисовалось плохо.
+function fieldCopyPlain(curr, prev, hasPrev, emptyText){
+  curr = curr || ''; prev = prev || '';
+  if(!hasPrev || curr === prev) return curr || emptyText;
+  return `Было: ${removedCopyText(prev || emptyText)}\nСтало: ${curr || emptyText}`;
+}
+
+function listCopyPlainLines(curr, prev, hasPrev, emptyText){
+  curr = curr || []; prev = prev || [];
+  if(!hasPrev || !listChanged(curr, prev)){
+    return curr.map(x => '- ' + x);
+  }
+  const oldLines = prev.length ? prev.map(x => '- ' + removedCopyText(x)) : ['- ' + removedCopyText(emptyText)];
+  const newLines = curr.length ? curr.map(x => '- ' + x) : ['- ' + emptyText];
+  return ['Было:', ...oldLines, 'Стало:', ...newLines];
+}
+
+// Текст для копирования/отправки. Если это доработка — показывает изменённые поля
+// явной парой "Было / Стало": прежнее значение зачёркнуто, новое оставлено обычным
+// текстом. Так постановщику видно, что именно поменялось и в рамках какой задачи.
+function cardText(task){
+  const tasks = loadTasks();
+  const prevTask = task.version > 1 ? tasks.find(t=>t.number===task.number && t.version===task.version-1) : null;
+  const hasPrev = !!prevTask;
+
+  let t = `Добрый день.\n\n`;
+  if(hasPrev){
+    t += `Это доработка задачи №${task.number}, версия ${task.version} (уточнено по сравнению с версией ${task.version - 1}).\n\n`;
+    if(task.change_reason){
+      t += `Что изменилось:\n${task.change_reason}\n\n`;
+    }
+  } else {
+    t += `После обсуждения зафиксировал понимание задачи (задача №${task.number}).\n\n`;
+  }
+
+  const raw = fieldCopyPlain(task.raw_input, hasPrev ? prevTask.raw_input : '', hasPrev, 'не указано');
+  t += `Что нужно сделать:\n${raw || 'не указано'}\n\n`;
+
+  const goal = fieldCopyPlain(task.goal, hasPrev ? prevTask.goal : '', hasPrev, '—');
+  t += `Цель:\n${goal || '—'}\n\n`;
+
+  const audience = fieldCopyPlain(task.audience, hasPrev ? prevTask.audience : '', hasPrev, '—');
+  t += `Для кого:\n${audience || '—'}\n\n`;
+
+  if(task.people || (hasPrev && prevTask.people)){
+    const people = fieldCopyPlain(task.people, hasPrev ? prevTask.people : '', hasPrev, '—');
+    t += `Кто ещё участвует:\n${people || '—'}\n\n`;
+  }
+
+  if(task.where || (hasPrev && prevTask.where)){
+    const where = fieldCopyPlain(task.where, hasPrev ? prevTask.where : '', hasPrev, '—');
+    t += `Где / в какой системе:\n${where || '—'}\n\n`;
+  }
+
+  const result = fieldCopyPlain(task.expected_result, hasPrev ? prevTask.expected_result : '', hasPrev, '—');
+  t += `Ожидаемый результат:\n${result || '—'}\n\n`;
+
+  const reqLines = listCopyPlainLines(task.requirements, hasPrev ? prevTask.requirements : [], hasPrev, 'не указано');
+  if(reqLines.length){
+    t += `Обязательные требования:\n${reqLines.join('\n')}\n\n`;
+  }
+
+  const deadline = fieldCopyPlain(task.deadline, hasPrev ? prevTask.deadline : '', hasPrev, 'не указан');
+  t += `Срок:\n${deadline || 'не указан'}\n\n`;
+
+  if(task.how || (hasPrev && prevTask.how)){
+    const how = fieldCopyPlain(task.how, hasPrev ? prevTask.how : '', hasPrev, '—');
+    t += `Как нужно сделать / ограничения:\n${how || '—'}\n\n`;
+  }
+
+  if(task.resources || (hasPrev && prevTask.resources)){
+    const resources = fieldCopyPlain(task.resources, hasPrev ? prevTask.resources : '', hasPrev, '—');
+    t += `Ресурсы:\n${resources || '—'}\n\n`;
+  }
+
+  const scopeLines = listCopyPlainLines(task.out_of_scope, hasPrev ? prevTask.out_of_scope : [], hasPrev, '');
+  if(scopeLines.length){
+    t += `Не входит в задачу:\n${scopeLines.join('\n')}\n\n`;
+  }
+
+  if(task.priority || (hasPrev && prevTask.priority)){
+    const priority = fieldCopyPlain(task.priority, hasPrev ? prevTask.priority : '', hasPrev, '—');
+    t += `Приоритет:\n${priority || '—'}\n\n`;
+  }
+
+  if(task.report_to || (hasPrev && prevTask.report_to)){
+    const reportTo = fieldCopyPlain(task.report_to, hasPrev ? prevTask.report_to : '', hasPrev, '—');
+    t += `Отчитаться:\n${reportTo || '—'}\n\n`;
+  }
+
+  const openLines = listCopyPlainLines(task.open_questions, hasPrev ? prevTask.open_questions : [], hasPrev, 'нет');
+  if(openLines.length){
+    t += `Открытые вопросы:\n${openLines.join('\n')}\n\n`;
+  }
+
+  t += `Прошу подтвердить, что задача понята верно, либо скорректировать.`;
+  return t;
+}
+
+function valueHtml(value, emptyText){
+  return value ? escapeHtml(value) : `<span class="empty" style="font-style:italic;color:var(--muted);">${emptyText}</span>`;
+}
+
+function revisionPairHtml(prevValue, value, emptyText){
+  const oldValue = prevValue || emptyText;
+  const newValue = value || emptyText;
+  return `
+    <div class="revision-pair">
+      <div class="revision-side old">
+        <div class="revision-label">Было</div>
+        <div class="revision-value"><del>${escapeHtml(oldValue)}</del></div>
+      </div>
+      <div class="revision-side new">
+        <div class="revision-label">Стало</div>
+        <div class="revision-value${value ? '' : ' empty'}">${escapeHtml(newValue)}</div>
+      </div>
+    </div>`;
+}
+
+function textFieldHtml(label, value, prevValue, changed, emptyText){
+  const changedClass = changed ? ' field-changed' : '';
+  let inner;
+  if(changed){
+    inner = revisionPairHtml(prevValue||'', value||'', emptyText);
+  } else {
+    inner = valueHtml(value, emptyText);
+  }
+  return `<div class="field${changedClass}"><div class="k">${label}${changed ? ' <span class="changed-tag">изменено</span>' : ''}</div><div class="v">${inner}</div></div>`;
+}
+
+function listHtml(items, emptyText, strike){
+  if(!items.length){
+    return `<div class="revision-value empty">${emptyText}</div>`;
+  }
+  return '<ul class="bullets">' + items.map(i => {
+    const text = escapeHtml(i);
+    return `<li>${strike ? '<del>' + text + '</del>' : text}</li>`;
+  }).join('') + '</ul>';
+}
+
+function listRevisionPairHtml(prevItems, items, emptyText){
+  const oldItems = prevItems && prevItems.length ? prevItems : [];
+  const newItems = items && items.length ? items : [];
+  return `
+    <div class="revision-pair">
+      <div class="revision-side old">
+        <div class="revision-label">Было</div>
+        ${listHtml(oldItems, emptyText, true)}
+      </div>
+      <div class="revision-side new">
+        <div class="revision-label">Стало</div>
+        ${listHtml(newItems, emptyText, false)}
+      </div>
+    </div>`;
+}
+
+function listFieldHtml(label, items, prevItems, hasPrev, emptyText){
+  const changed = hasPrev && listChanged(items, prevItems||[]);
+  const changedClass = changed ? ' field-changed' : '';
+  let inner;
+  if(changed){
+    inner = listRevisionPairHtml(prevItems||[], items||[], emptyText);
+  } else if(items.length){
+    inner = '<ul class="bullets">' + items.map(i => `<li>${escapeHtml(i)}</li>`).join('') + '</ul>';
+  } else {
+    inner = `<div class="v empty">${emptyText}</div>`;
+  }
+  return `<div class="field${changedClass}"><div class="k">${label}${changed ? ' <span class="changed-tag">изменено</span>' : ''}</div>${inner}</div>`;
+}
+
+function renderCard(taskId){
+  const tasks = loadTasks();
+  const task = tasks.find(t=>t.id===taskId);
+  if(!task){ document.getElementById('card-main').innerHTML = '<div class="empty-state">Задача не найдена</div>'; return; }
+  currentTaskId = taskId;
+
+  const siblings = tasks.filter(t=>t.number===task.number).sort((a,b)=>a.version-b.version);
+  const chips = siblings.length > 1 ? `
+    <div class="version-chips">
+      ${siblings.map(s => `<span class="version-chip ${s.id===task.id?'active':''}" onclick="renderCard('${s.id}')">в${s.version}${s.id===task.id?' · сейчас':''}</span>`).join('')}
+    </div>` : '';
+
+  const prevTask = task.version > 1 ? tasks.find(t=>t.number===task.number && t.version===task.version-1) : null;
+  const hasPrev = !!prevTask;
+
+  const lineage = task.version > 1
+    ? `<div class="hint" style="margin:-6px 0 14px;">Доработка задачи №${task.number} · версия ${task.version} из ${task.version - 1}${task.change_reason ? ' · «' + escapeHtml(task.change_reason) + '»' : ''}</div>`
+    : '';
+
+  const df = (field) => hasPrev && (task[field] || '') !== (prevTask[field] || '');
+  const taskName = getTaskName(task.number);
+
+  const main = document.getElementById('card-main');
+  main.innerHTML = `
+    ${chips}
+    <div class="card-box">
+      <h2 style="flex-wrap:wrap; row-gap:6px;">
+        <span style="text-transform:none; font-weight:600;">
+          №${task.number}${taskName ? ' · ' + escapeHtml(taskName) : ''} · версия ${task.version}
+          <button class="icon-btn" title="Назвать задачу" onclick="renameTask(${task.number})" style="font-size:13px;">✎</button>
+        </span>
+        <span style="display:flex; align-items:center; gap:4px;">
+          ${task.status==='draft' ? `<button class="icon-btn" title="Редактировать черновик" onclick="startEditDraft('${task.id}')">✎</button>` : ''}
+          <span class="badge ${statusClass(task.status)}">${statusLabel(task.status)}</span>
+        </span>
+      </h2>
+      ${lineage}
+      ${textFieldHtml('Что нужно сделать', task.raw_input, hasPrev?prevTask.raw_input:'', df('raw_input'), 'не указано')}
+      ${(task.ai_summary || (hasPrev && prevTask.ai_summary)) ? textFieldHtml('Как ИИ поняла задачу', task.ai_summary, hasPrev?prevTask.ai_summary:'', df('ai_summary'), '—') : ''}
+      ${textFieldHtml('Цель', task.goal, hasPrev?prevTask.goal:'', df('goal'), 'не указано')}
+      ${textFieldHtml('Для кого', task.audience, hasPrev?prevTask.audience:'', df('audience'), 'не указано')}
+      ${(task.people || (hasPrev && prevTask.people)) ? textFieldHtml('Кто ещё участвует', task.people, hasPrev?prevTask.people:'', df('people'), '—') : ''}
+      ${(task.where || (hasPrev && prevTask.where)) ? textFieldHtml('Где / в какой системе', task.where, hasPrev?prevTask.where:'', df('where'), '—') : ''}
+      ${textFieldHtml('Ожидаемый результат', task.expected_result, hasPrev?prevTask.expected_result:'', df('expected_result'), 'не указано')}
+      ${listFieldHtml('Обязательные требования', task.requirements, hasPrev?prevTask.requirements:[], hasPrev, 'не указано')}
+      ${textFieldHtml('Срок', task.deadline, hasPrev?prevTask.deadline:'', df('deadline'), 'не указан')}
+      ${(task.how || (hasPrev && prevTask.how)) ? textFieldHtml('Как / ограничения', task.how, hasPrev?prevTask.how:'', df('how'), '—') : ''}
+      ${(task.resources || (hasPrev && prevTask.resources)) ? textFieldHtml('Ресурсы', task.resources, hasPrev?prevTask.resources:'', df('resources'), '—') : ''}
+      ${(task.out_of_scope && task.out_of_scope.length) || (hasPrev && prevTask.out_of_scope && prevTask.out_of_scope.length) ? listFieldHtml('Не входит в задачу', task.out_of_scope||[], hasPrev?prevTask.out_of_scope:[], hasPrev, '—') : ''}
+      ${(task.priority || (hasPrev && prevTask.priority)) ? textFieldHtml('Приоритет', task.priority, hasPrev?prevTask.priority:'', df('priority'), '—') : ''}
+      ${(task.report_to || (hasPrev && prevTask.report_to)) ? textFieldHtml('Отчитаться', task.report_to, hasPrev?prevTask.report_to:'', df('report_to'), '—') : ''}
+      ${listFieldHtml('Открытые вопросы', task.open_questions, hasPrev?prevTask.open_questions:[], hasPrev, 'нет')}
+    </div>
+    <div class="actions-row">
+      <button onclick="markStatus('confirmed')">Всё верно</button>
+      ${task.status !== 'draft'
+        ? `<button onclick="startCorrection('${task.id}')">Исправить (новая версия)</button>`
+        : `<button onclick="startEditDraft('${task.id}')">Редактировать черновик</button>`}
+    </div>
+    <div class="actions-row">
+      <button onclick="copyCard()">Копировать</button>
+      <button onclick="shareCard()">Поделиться</button>
+    </div>
+    <div class="actions-row">
+      <button class="danger" onclick="deleteTask('${task.id}')">Удалить задачу</button>
+    </div>
+  `;
+}
+
+function markStatus(status){
+  const tasks = loadTasks();
+  const task = tasks.find(t=>t.id===currentTaskId);
+  if(!task) return;
+  task.status = status;
+  task.history.push({ at: new Date().toISOString(), status });
+  saveTasks(tasks);
+  renderCard(task.id);
+  showToast(status === 'confirmed' ? 'Отмечено «Всё верно»' : 'Статус обновлён');
+}
+
+function copyCard(){
+  const tasks = loadTasks();
+  const task = tasks.find(t=>t.id===currentTaskId);
+  if(!task) return;
+  const text = cardText(task);
+  navigator.clipboard && navigator.clipboard.writeText ?
+    navigator.clipboard.writeText(text).then(()=>showToast('Скопировано')).catch(()=>fallbackCopy(text)) :
+    fallbackCopy(text);
+  if(task.status === 'draft'){
+    task.status = 'sent';
+    saveTasks(tasks);
+    renderCard(task.id);
+  }
+}
+function fallbackCopy(text){
+  const ta = document.createElement('textarea');
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); showToast('Скопировано'); }catch(e){ showToast('Не удалось скопировать'); }
+  document.body.removeChild(ta);
+}
+
+function shareCard(){
+  const tasks = loadTasks();
+  const task = tasks.find(t=>t.id===currentTaskId);
+  if(!task) return;
+  const text = cardText(task);
+  if(navigator.share){
+    navigator.share({ title: 'Задача №'+task.number, text }).catch(()=>{});
+  } else {
+    copyCard();
+    showToast('Web Share недоступен — текст скопирован');
+  }
+}
+
+function renderHistory(){
+  const allTasks = loadTasks();
+  const tasks = allTasks.filter(t=>!t.deleted_at);
+  const deletedCount = allTasks.length - tasks.length;
+  const main = document.getElementById('history-main');
+  document.getElementById('history-count-desc').textContent = tasks.length ? tasks.length + ' карточек' : 'Ранее созданные карточки';
+
+  const trashLink = `<div style="text-align:center; margin-top:6px;"><button class="linklike" onclick="goTo('screen-trash')">Недавно удалённые${deletedCount ? ' (' + deletedCount + ')' : ''}</button></div>`;
+
+  if(!tasks.length){
+    main.innerHTML = '<div class="empty-state">Пока нет ни одной задачи.<br>Нажмите «Новая задача» на главной.</div>' + trashLink;
+    return;
+  }
+
+  // группировка по номеру задачи: каждая группа — задача, версии внутри — ветка доработок
+  const groups = {};
+  tasks.forEach(t => { (groups[t.number] = groups[t.number] || []).push(t); });
+  const numbers = Object.keys(groups).map(Number).sort((a,b)=>b-a); // новые задачи сверху
+
+  const groupsHtml = numbers.map(num => {
+    const versions = groups[num].sort((a,b)=>a.version-b.version);
+    const versionRows = versions.map(v => `
+      <div class="history-item" onclick="renderCard('${v.id}'); goTo('screen-card')">
+        <div>
+          <div class="title"><span class="version-tag">в${v.version}</span>${escapeHtml(v.title)}</div>
+          <div class="meta">${v.version > 1 ? 'доработка задачи №' + num + ' · ' : ''}${new Date(v.created_at).toLocaleDateString('ru-RU')}</div>
+        </div>
+        <span class="badge ${statusClass(v.status)}">${statusLabel(v.status)}</span>
+      </div>
+    `).join('');
+
+    const name = getTaskName(num);
+    return `
+      <div class="task-group">
+        <div class="task-group-title">
+          <span class="task-group-title-text">Задача №${num}${name ? ' · ' + escapeHtml(name) : ''}${versions.length > 1 ? ' · ' + versions.length + ' версии' : ''}</span>
+          <button class="icon-btn" title="Назвать задачу" onclick="renameTask(${num})">✎</button>
+        </div>
+        <div class="version-list">${versionRows}</div>
+      </div>
+    `;
+  }).join('');
+
+  main.innerHTML = groupsHtml + trashLink;
+}
+
+function deleteTask(id){
+  const tasks = loadTasks();
+  const task = tasks.find(t=>t.id===id);
+  if(!task) return;
+  if(!confirm(`Удалить задачу №${task.number} (версия ${task.version})? Её можно будет восстановить в течение ${TRASH_RETENTION_DAYS} дней в разделе «Недавно удалённые».`)) return;
+  task.deleted_at = new Date().toISOString();
+  saveTasks(tasks);
+  showToast(`Удалено. Восстановить можно в течение ${TRASH_RETENTION_DAYS} дней.`);
+  goBack();
+}
+
+function restoreTask(id){
+  const tasks = loadTasks();
+  const task = tasks.find(t=>t.id===id);
+  if(!task) return;
+  delete task.deleted_at;
+  saveTasks(tasks);
+  renderTrash();
+  showToast(`Задача №${task.number} восстановлена`);
+}
+
+function renderTrash(){
+  const tasks = loadTasks();
+  const deleted = tasks.filter(t=>t.deleted_at).sort((a,b)=> new Date(b.deleted_at) - new Date(a.deleted_at));
+  const main = document.getElementById('trash-main');
+  if(!deleted.length){
+    main.innerHTML = '<div class="empty-state">Недавно удалённых нет.</div>';
+    return;
+  }
+  main.innerHTML = deleted.map(t => {
+    const daysLeft = Math.max(0, TRASH_RETENTION_DAYS - Math.floor((Date.now() - new Date(t.deleted_at).getTime()) / 86400000));
+    return `
+      <div class="history-item" style="cursor:default;">
+        <div>
+          <div class="title">№${t.number} · версия ${t.version} · ${escapeHtml(t.title)}</div>
+          <div class="meta">удалено ${new Date(t.deleted_at).toLocaleDateString('ru-RU')} · осталось ${daysLeft} дн.</div>
+        </div>
+        <button onclick="restoreTask('${t.id}')" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:#fff; cursor:pointer; font-size:12px;">Восстановить</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function escapeHtml(str){
+  return (str||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+updateHomeMeta();
+checkLockOnLoad();
+document.getElementById('pin-input').addEventListener('keydown', e => { if(e.key === 'Enter') attemptUnlock(); });
+initCloudSync();
+getSupabase().auth.onAuthStateChange((event) => {
+  if(event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') initCloudSync();
+});
+
+// Живой предпросмотр: любое изменение поля на экране ввода задачи пересобирает
+// итоговый текст внизу, без отдельной кнопки "обновить".
+document.getElementById('screen-input').addEventListener('input', updateDraftPreview);
+document.getElementById('screen-input').addEventListener('change', updateDraftPreview);
+</script>
+</body>
+</html>

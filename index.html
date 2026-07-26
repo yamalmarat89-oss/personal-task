@@ -245,6 +245,17 @@
     <button class="linklike" onclick="resetPinProtection()">Забыли PIN? Сбросить защиту</button>
   </div>
 
+  <div class="pin-lock-box" id="pin-gate-box" style="display:none;">
+    <h1>Войдите, чтобы настроить устройство</h1>
+    <p class="sub">PIN ещё не задан на этом устройстве. Прежде чем его создать, подтвердите, что это ваш аккаунт — иначе так и должно быть недоступно.</p>
+    <input type="text" class="pin-text-input" id="gate-email" placeholder="Email" autocomplete="email">
+    <input type="password" class="pin-text-input" id="gate-password" placeholder="Пароль" autocomplete="current-password" style="margin-top:10px;">
+    <div class="hint" id="gate-error" style="display:none; color:var(--danger);"></div>
+    <div class="actions-row">
+      <button class="primary" onclick="attemptGateSignIn()">Войти</button>
+    </div>
+  </div>
+
   <div class="pin-lock-box" id="pin-setup-box" style="display:none;">
     <h1>Создайте PIN для входа</h1>
     <p class="sub">Без PIN этот прототип не откроется — придумайте код и секретное слово на случай, если забудете PIN.</p>
@@ -941,22 +952,51 @@ function isPinSet(){ return !!getPin(); }
 
 // PIN обязателен: если не задан, показываем не сам экран ввода, а экран создания —
 // приложение никогда не открывается "как есть" без хотя бы одного PIN за всё время жизни.
-function checkLockOnLoad(){
+// Если PIN ещё не задан — это либо самый первый запуск на устройстве, либо PIN только
+// что сбросили секретным словом. В обоих случаях сперва требуем реальный вход в аккаунт
+// (Supabase, проверяется на сервере) и только потом пускаем к созданию PIN — так экран
+// создания PIN не может пройти никто, кроме владельца аккаунта, даже зная публичный код.
+async function checkLockOnLoad(){
   const overlay = document.getElementById('pin-lock-screen');
   const app = document.getElementById('app-root');
   const enterBox = document.getElementById('pin-enter-box');
   const setupBox = document.getElementById('pin-setup-box');
+  const gateBox = document.getElementById('pin-gate-box');
   overlay.classList.add('show');
   app.style.display = 'none';
+
   if(isPinSet()){
     enterBox.style.display = '';
     setupBox.style.display = 'none';
+    gateBox.style.display = 'none';
     document.getElementById('pin-input').focus();
-  } else {
-    enterBox.style.display = 'none';
+    return;
+  }
+
+  enterBox.style.display = 'none';
+  const user = await getSessionUser();
+  if(user){
+    gateBox.style.display = 'none';
     setupBox.style.display = '';
     document.getElementById('setup-pin-input').focus();
+  } else {
+    setupBox.style.display = 'none';
+    gateBox.style.display = '';
+    document.getElementById('gate-email').focus();
   }
+}
+async function attemptGateSignIn(){
+  const email = document.getElementById('gate-email').value.trim();
+  const password = document.getElementById('gate-password').value;
+  const errorEl = document.getElementById('gate-error');
+  const showError = msg => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+  if(!email || !password){ showError('Укажите email и пароль'); return; }
+  const { error } = await getSupabase().auth.signInWithPassword({ email, password });
+  if(error){ showError('Неверный email или пароль'); return; }
+  errorEl.style.display = 'none';
+  document.getElementById('pin-gate-box').style.display = 'none';
+  document.getElementById('pin-setup-box').style.display = '';
+  document.getElementById('setup-pin-input').focus();
 }
 function completePinSetup(){
   const pin = document.getElementById('setup-pin-input').value.trim();
@@ -2204,6 +2244,9 @@ checkLockOnLoad();
 document.getElementById('pin-input').addEventListener('keydown', e => { if(e.key === 'Enter') attemptUnlock(); });
 ['setup-pin-input','setup-pin-confirm','setup-pin-recovery'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', e => { if(e.key === 'Enter') completePinSetup(); });
+});
+['gate-email','gate-password'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => { if(e.key === 'Enter') attemptGateSignIn(); });
 });
 initCloudSync();
 getSupabase().auth.onAuthStateChange((event) => {

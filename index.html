@@ -565,6 +565,7 @@ const TRASH_RETENTION_DAYS = 30;
 const DEFAULT_LUNCH_HOURS = 1.5;
 const SETTINGS_KEY = 'atc_settings_v1';
 const PIN_KEY = 'atc_pin_v1';
+const PIN_EMAIL_KEY = 'atc_pin_email_v1';
 
 // --- Облачная синхронизация (Supabase) ---
 // URL и publishable-ключ безопасно хранить прямо в коде: доступ к данным защищён
@@ -637,6 +638,7 @@ async function initCloudSync(){
   const user = await getSessionUser();
   renderSyncStatus(user);
   if(!user) return;
+  ensurePinEmailBackfill();
   showToast('Синхронизация…');
   const changed = await cloudPullAll();
   if(changed){
@@ -950,21 +952,48 @@ function attemptUnlock(){
     input.focus();
   }
 }
+// Сброс PIN с экрана блокировки требует email того же аккаунта, что привязан к
+// PIN — иначе забытый PIN мог бы снять любой, кто просто открыл страницу.
 function resetPinProtection(){
+  const expectedEmail = (localStorage.getItem(PIN_EMAIL_KEY) || '').trim().toLowerCase();
+  if(!expectedEmail){
+    alert('Для этого PIN не привязан email восстановления — сброс через этот экран недоступен.');
+    return;
+  }
+  const input = prompt('Для сброса PIN укажите email вашего аккаунта:');
+  if(input === null) return;
+  if(input.trim().toLowerCase() !== expectedEmail){
+    alert('Email не совпадает — сброс PIN невозможен.');
+    return;
+  }
   if(!confirm('Убрать PIN-защиту входа? Задачи, дни и настройки ИИ при этом не удаляются — сбрасывается только PIN.')) return;
   localStorage.removeItem(PIN_KEY);
+  localStorage.removeItem(PIN_EMAIL_KEY);
   document.getElementById('pin-lock-screen').classList.remove('show');
   document.getElementById('app-root').style.display = '';
+}
+
+// Если PIN уже стоит, а email восстановления ещё не сохранён (например, PIN
+// поставили до появления этой защиты) — подставляем email активной сессии синхронизации.
+async function ensurePinEmailBackfill(){
+  if(!isPinSet() || localStorage.getItem(PIN_EMAIL_KEY)) return;
+  const user = await getSessionUser();
+  if(user?.email) localStorage.setItem(PIN_EMAIL_KEY, user.email);
 }
 
 function renderPinSettings(){
   const body = document.getElementById('pin-settings-body');
   if(!body) return;
   if(isPinSet()){
+    const email = localStorage.getItem(PIN_EMAIL_KEY);
     body.innerHTML = `
       <div class="field"><div class="v">PIN-код установлен.</div></div>
+      <div class="field"><div class="k">Email для сброса PIN</div><div class="v">${email ? escapeHtml(email) : 'не задан — сброс через экран блокировки недоступен'}</div></div>
       <div class="actions-row">
         <button onclick="promptChangePin()">Изменить PIN</button>
+        <button onclick="promptChangePinEmail()">Изменить email для сброса</button>
+      </div>
+      <div class="actions-row">
         <button class="danger" onclick="promptDisablePin()">Отключить PIN</button>
       </div>
     `;
@@ -978,10 +1007,14 @@ function renderPinSettings(){
     `;
   }
 }
-function setNewPin(){
+async function setNewPin(){
   const val = document.getElementById('new-pin-input').value.trim();
   if(!/^\d{4,6}$/.test(val)){ showToast('PIN — это 4-6 цифр'); return; }
   localStorage.setItem(PIN_KEY, val);
+  const user = await getSessionUser();
+  const suggested = user?.email || '';
+  const email = prompt('Email для восстановления, если забудете PIN:', suggested);
+  if(email && email.trim()) localStorage.setItem(PIN_EMAIL_KEY, email.trim());
   showToast('PIN установлен');
   renderPinSettings();
 }
@@ -993,9 +1026,19 @@ function promptChangePin(){
   showToast('PIN изменён');
   renderPinSettings();
 }
+function promptChangePinEmail(){
+  const current = localStorage.getItem(PIN_EMAIL_KEY) || '';
+  const val = prompt('Email для сброса PIN:', current);
+  if(val === null) return;
+  if(!val.trim()){ showToast('Email не может быть пустым'); return; }
+  localStorage.setItem(PIN_EMAIL_KEY, val.trim());
+  showToast('Email для сброса обновлён');
+  renderPinSettings();
+}
 function promptDisablePin(){
   if(!confirm('Отключить PIN-защиту входа?')) return;
   localStorage.removeItem(PIN_KEY);
+  localStorage.removeItem(PIN_EMAIL_KEY);
   showToast('PIN отключён');
   renderPinSettings();
 }

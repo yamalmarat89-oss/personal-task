@@ -444,7 +444,7 @@
     <header class="topbar">
       <button class="back" onclick="goBack()">←</button>
       <h1>Календарь дня</h1>
-      <button class="home-btn" style="margin-right:6px;" onclick="goTo('screen-days-report')">Подробнее</button>
+      <button class="home-btn" style="margin-right:6px;" onclick="openDaysReport()">Подробнее</button>
       <button class="home-btn" onclick="goHome()">Домой</button>
     </header>
     <main>
@@ -458,18 +458,40 @@
     </main>
   </div>
 
-  <!-- ЭКРАН: Подробный отчёт за месяц -->
+  <!-- ЭКРАН: Подробный отчёт за период -->
   <div class="screen" id="screen-days-report">
     <header class="topbar">
       <button class="back" onclick="goBack()">←</button>
-      <h1 id="days-report-title">Отчёт за месяц</h1>
+      <h1>Отчёт</h1>
       <button class="home-btn" onclick="goHome()">Домой</button>
     </header>
     <main>
+      <div class="version-chips">
+        <span class="version-chip active" id="period-chip-month" onclick="setReportPeriod('month')">Месяц</span>
+        <span class="version-chip" id="period-chip-quarter" onclick="setReportPeriod('quarter')">Квартал</span>
+      </div>
+      <div class="calendar-toolbar">
+        <button onclick="changeReportPeriod(-1)">←</button>
+        <h2 id="days-report-subtitle"></h2>
+        <button onclick="changeReportPeriod(1)">→</button>
+      </div>
+
       <div class="actions-row" style="margin-top:0;">
-        <button class="primary" onclick="copyDaysReport()">Копировать</button>
+        <button onclick="copyDaysReport()">Копировать журнал</button>
       </div>
       <textarea id="days-report-text" class="report-box" readonly></textarea>
+
+      <div class="card-box">
+        <h2 style="font-size:14px;">Отчёт через ИИ</h2>
+        <div class="hint" style="margin-top:0;">Свяжет дневник дней и задачи периода в готовый текст — что делалось, что завершено. Проверьте и поправьте перед тем, как сдавать.</div>
+        <div class="actions-row">
+          <button id="ai-report-btn" onclick="generateAiReport()">Сформировать отчёт через ИИ</button>
+        </div>
+        <textarea id="ai-report-text" class="report-box" placeholder="Нажмите «Сформировать отчёт через ИИ»"></textarea>
+        <div class="actions-row">
+          <button class="primary" onclick="copyAiReport()">Копировать отчёт</button>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -1423,7 +1445,7 @@ function renderDayCalendar(){
     const log = logs[id];
     const hours = log ? calcWorkHours(log.start, log.end, log.lunch) : null;
     const hasEntry = !!(log && (log.start || log.end || log.note || log.summary));
-    const mark = hasEntry ? (hours !== null ? formatHours(hours) : 'есть запись') : 'заполнить';
+    const mark = hasEntry ? (hours !== null ? formatHours(hours) : 'есть запись') : '';
     cells.push(`
       <button class="calendar-day ${id===today?'today':''} ${hasEntry?'has-entry':''}" onclick="openDayModal('${id}')">
         <span class="num">${day}</span>
@@ -1485,34 +1507,131 @@ function saveDayModal(){
 }
 
 // --- Компактный текстовый отчёт за месяц (для копирования в недельный/месячный отчёт) ---
+// Период отчёта — независимый от курсора основного календаря, чтобы можно было
+// смотреть, например, квартал целиком, не переключая месяц на экране "Календарь дня".
+let reportPeriod = 'month'; // 'month' | 'quarter'
+let reportCursor = new Date();
+
+function openDaysReport(){
+  reportPeriod = 'month';
+  reportCursor = new Date(calendarCursor);
+  goTo('screen-days-report');
+  document.getElementById('period-chip-month').classList.add('active');
+  document.getElementById('period-chip-quarter').classList.remove('active');
+}
+function setReportPeriod(period){
+  reportPeriod = period;
+  document.getElementById('period-chip-month').classList.toggle('active', period === 'month');
+  document.getElementById('period-chip-quarter').classList.toggle('active', period === 'quarter');
+  renderDaysReport();
+}
+function changeReportPeriod(delta){
+  const step = reportPeriod === 'quarter' ? delta * 3 : delta;
+  reportCursor = new Date(reportCursor.getFullYear(), reportCursor.getMonth() + step, 1);
+  renderDaysReport();
+}
+function getReportRange(){
+  if(reportPeriod === 'quarter'){
+    const qStartMonth = Math.floor(reportCursor.getMonth() / 3) * 3;
+    return {
+      start: new Date(reportCursor.getFullYear(), qStartMonth, 1),
+      end: new Date(reportCursor.getFullYear(), qStartMonth + 3, 0)
+    };
+  }
+  return {
+    start: new Date(reportCursor.getFullYear(), reportCursor.getMonth(), 1),
+    end: new Date(reportCursor.getFullYear(), reportCursor.getMonth() + 1, 0)
+  };
+}
+function reportRangeLabel(){
+  const { start, end } = getReportRange();
+  if(reportPeriod === 'month') return monthTitle(start);
+  const q = Math.floor(start.getMonth() / 3) + 1;
+  const fmt = d => d.toLocaleDateString('ru-RU', { month:'long' });
+  return `${q} квартал ${start.getFullYear()} (${fmt(start)}–${fmt(end)})`;
+}
+
 function renderDaysReport(){
   const logs = loadDayLogs();
-  const year = calendarCursor.getFullYear();
-  const month = calendarCursor.getMonth();
-  document.getElementById('days-report-title').textContent = 'Отчёт: ' + monthTitle(calendarCursor);
+  const { start, end } = getReportRange();
+  document.getElementById('days-report-subtitle').textContent = reportRangeLabel();
+  document.getElementById('ai-report-text').value = '';
 
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
   const lines = [];
-  for(let day=1; day<=daysInMonth; day++){
-    const id = dateId(new Date(year, month, day));
+  const cursor = new Date(start);
+  while(cursor <= end){
+    const id = dateId(cursor);
     const log = logs[id];
     const hasEntry = !!(log && (log.start || log.end || log.note || log.summary));
-    if(!hasEntry) continue;
-    const hours = calcWorkHours(log.start, log.end, log.lunch);
-    const timeRange = (log.start || log.end) ? `${log.start || '?'}–${log.end || '?'}` : 'время не указано';
-    const hoursText = hours !== null ? formatHours(hours) : 'часы не посчитаны';
-    const d = parseDateId(id);
-    const dateLabel = `${pad2(d.getDate())}.${pad2(d.getMonth()+1)}.${d.getFullYear()} (${weekdayShort(d)})`;
-    const body = (log.summary || log.note || '').trim();
-    lines.push(`${dateLabel} — ${timeRange}, ${hoursText}${body ? '\n' + body : ''}`);
+    if(hasEntry){
+      const hours = calcWorkHours(log.start, log.end, log.lunch);
+      const timeRange = (log.start || log.end) ? `${log.start || '?'}–${log.end || '?'}` : 'время не указано';
+      const hoursText = hours !== null ? formatHours(hours) : 'часы не посчитаны';
+      const dateLabel = `${pad2(cursor.getDate())}.${pad2(cursor.getMonth()+1)}.${cursor.getFullYear()} (${weekdayShort(cursor)})`;
+      const body = (log.summary || log.note || '').trim();
+      lines.push(`${dateLabel} — ${timeRange}, ${hoursText}${body ? '\n' + body : ''}`);
+    }
+    cursor.setDate(cursor.getDate() + 1);
   }
   document.getElementById('days-report-text').value = lines.length
     ? lines.join('\n\n')
-    : 'За этот месяц пока нет заполненных дней.';
+    : 'За этот период пока нет заполненных дней.';
 }
 
 function copyDaysReport(){
   const text = document.getElementById('days-report-text').value;
+  navigator.clipboard && navigator.clipboard.writeText ?
+    navigator.clipboard.writeText(text).then(()=>showToast('Скопировано')).catch(()=>fallbackCopy(text)) :
+    fallbackCopy(text);
+}
+
+// Сводный ИИ-отчёт: берёт компактный журнал дней (уже посчитан в renderDaysReport)
+// плюс задачи, у которых хоть одна версия создана в этом периоде (по каждой такой
+// задаче — самая свежая версия из этого периода, чтобы не тащить всю историю правок).
+async function generateAiReport(){
+  if(!aiConfigured()){ showToast('Сначала укажите API-ключ ИИ в настройках'); return; }
+
+  const { start, end } = getReportRange();
+  const rangeEndExclusive = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+  const logText = document.getElementById('days-report-text').value;
+  const hasLogText = !logText.startsWith('За этот период');
+
+  const inRangeVersions = loadTasks().filter(t => !t.deleted_at).filter(t => {
+    const created = new Date(t.created_at);
+    return created >= start && created < rangeEndExclusive;
+  });
+  const latestByNumber = {};
+  inRangeVersions.forEach(t => {
+    if(!latestByNumber[t.number] || t.version > latestByNumber[t.number].version) latestByNumber[t.number] = t;
+  });
+  const taskList = Object.values(latestByNumber).sort((a,b) => a.number - b.number);
+  const taskLines = taskList.map(t => {
+    const title = getTaskName(t.number) || t.title;
+    return `№${t.number} «${title}» — статус: ${statusLabel(t.status)}\n${t.ai_summary || t.raw_input}`;
+  }).join('\n\n');
+
+  if(!hasLogText && !taskList.length){ showToast('Нет данных за этот период'); return; }
+
+  const combined = `ДНЕВНИК РАБОЧИХ ДНЕЙ:\n${hasLogText ? logText : 'записей нет'}\n\nЗАДАЧИ ЗА ПЕРИОД:\n${taskLines || 'задач нет'}`;
+
+  setButtonBusy('ai-report-btn', 'ИИ формирует отчёт…');
+  try{
+    const text = await aiChatComplete(
+      'Ты помогаешь составить отчёт о проделанной работе за период для руководителя. На основе рабочего дневника по дням и списка задач ниже составь связный текст на русском: чем занимались, отдельно — какие задачи завершены, какие в работе. Пиши по пунктам, деловым языком, без воды и лишних вступлений. Не придумывай факты, которых нет в данных.',
+      combined
+    );
+    document.getElementById('ai-report-text').value = text.trim();
+    showToast('Отчёт сформирован — проверьте перед сдачей');
+  }catch(e){
+    showToast('Не удалось сформировать отчёт: ' + e.message);
+  }finally{
+    clearButtonBusy('ai-report-btn');
+  }
+}
+
+function copyAiReport(){
+  const text = document.getElementById('ai-report-text').value;
+  if(!text.trim()){ showToast('Сначала сформируйте отчёт'); return; }
   navigator.clipboard && navigator.clipboard.writeText ?
     navigator.clipboard.writeText(text).then(()=>showToast('Скопировано')).catch(()=>fallbackCopy(text)) :
     fallbackCopy(text);
